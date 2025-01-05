@@ -20,8 +20,7 @@ The dependency is available in maven central (see badge for version):
 
 ## Usage
 
-The library's goal is to provide the following essential methods for your repositories (refer to the `Repository` 
-interface):
+The library's goal is to provide the following essential methods for your repositories (`Repository` interface):
 
 - **`findAll`**: Retrieves all entities from the repository.
 - **`getById`** and **`findById`**: Fetches an entity by its identifier.
@@ -119,10 +118,6 @@ public class ApplicationService {
         return applicationRepository.findAll();
     }
 
-    public Optional<ApplicationEntity> findByReference(String reference) {
-        return applicationRepository.findByReference(reference);
-    }
-
     public void decommission(String reference) {
         return applicationRepository.findByReference(reference)
                 .ifPresent(app -> app.setStatus("DECOMMISSIONED"));
@@ -150,6 +145,8 @@ public class ApplicationService implements ApplicationRepository {
 
 }
 ```
+
+Note that this example can be found in the library's tests.
 
 ## Contributing
 
