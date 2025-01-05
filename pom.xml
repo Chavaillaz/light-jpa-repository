@@ -10,7 +10,7 @@
     <packaging>jar</packaging>
 
     <name>${project.groupId}.${project.artifactId}</name>
-    <description>Library to easily implement JPA based (Java Persistence API) repositories</description>
+    <description>Library to help implementing JPA based (Java Persistence API) repositories</description>
     <url>https://github.com/chavaillaz/light-jpa-repository</url>
 
     <scm>

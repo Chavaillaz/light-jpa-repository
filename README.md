@@ -1,10 +1,11 @@
 # Light JPA Repository
 
-![Dependency Check](https://github.com/chavaillaz/light-jpa-repository/actions/workflows/system-tests.yml/badge.svg)
+![Quality Gate](https://github.com/chavaillaz/light-jpa-repository/actions/workflows/sonarcloud.yml/badge.svg)
+![Dependency Check](https://github.com/chavaillaz/light-jpa-repository/actions/workflows/snyk.yml/badge.svg)
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.chavaillaz/light-jpa-repository/badge.svg)](https://maven-badges.herokuapp.com/maven-central/com.chavaillaz/light-jpa-repository)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-Library to easily implement JPA based (Java Persistence API) repositories.
+Library to help implementing JPA based (Java Persistence API) repositories.
 
 ## Installation
 
@@ -19,8 +20,8 @@ The dependency is available in maven central (see badge for version):
 
 ## Usage
 
-The library's goal is to provide the following essential methods for managing your repositories (refer to the
-`Repository` interface):
+The library's goal is to provide the following essential methods for your repositories (refer to the `Repository` 
+interface):
 
 - **`findAll`**: Retrieves all entities from the repository.
 - **`getById`** and **`findById`**: Fetches an entity by its identifier.
@@ -29,7 +30,7 @@ The library's goal is to provide the following essential methods for managing yo
 - **`save`**: Persists an entity.
 - **`delete`**: Removes an entity.
 
-As a lightweight solution, it doesn't generate other queries like more heavyweight frameworks such as Spring Data do.
+As a lightweight solution, it doesn't generate other queries like more heavyweight frameworks such as Spring Data.
 
 To use the library, ensure that your entities implement the `Identifiable` interface to enable retrieval of their
 primary key. Next, define an interface that extends the `Repository` interface and add any custom methods needed for
@@ -58,6 +59,9 @@ public class ApplicationEntity implements Identifiable<Long>, Serializable {
 
     @Column(name = "REFERENCE", nullable = false)
     private String reference;
+
+    @Column(name = "STATUS", nullable = false)
+    private String status;
     
     ...
 ```
@@ -110,9 +114,18 @@ public class ApplicationService {
     @Inject
     @JpaRepository
     private ApplicationRepository applicationRepository;
+    
+    public List<ApplicationEntity> findAll() {
+        return applicationRepository.findAll();
+    }
 
     public Optional<ApplicationEntity> findByReference(String reference) {
         return applicationRepository.findByReference(reference);
+    }
+
+    public void decommission(String reference) {
+        return applicationRepository.findByReference(reference)
+                .ifPresent(app -> app.setStatus("DECOMMISSIONED"));
     }
 
 }
@@ -122,12 +135,18 @@ If you're using Lombok, you can combine the service and repository, providing re
 interacting with the service:
 
 ```java
+@ApplicationScoped
 public class ApplicationService implements ApplicationRepository {
 
     @Inject
     @Delegate
     @JpaRepository
     private ApplicationRepository applicationRepository;
+    
+    public void decommission(String reference) {
+        return findByReference(reference)
+                .ifPresent(app -> app.setStatus("DECOMMISSIONED"));
+    }
 
 }
 ```
