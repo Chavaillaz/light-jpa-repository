@@ -85,9 +85,9 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     }
 
     @Override
-    public void lock(E entity) {
+    public void lock(E entity, LockModeType lockMode) {
         // Refresh to get last state of the entity if being already locked and changed
-        entityManager.refresh(entity, PESSIMISTIC_WRITE);
+        entityManager.refresh(entity, lockMode);
     }
 
     @Override

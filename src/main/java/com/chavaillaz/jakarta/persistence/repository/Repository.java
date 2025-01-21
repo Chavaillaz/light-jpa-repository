@@ -1,10 +1,13 @@
 package com.chavaillaz.jakarta.persistence.repository;
 
+import static jakarta.persistence.LockModeType.PESSIMISTIC_WRITE;
+
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import com.chavaillaz.jakarta.persistence.Identifiable;
+import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 
 /**
@@ -58,7 +61,17 @@ public interface Repository<E extends Identifiable<I>, I> {
      *
      * @param entity The entity
      */
-    void lock(E entity);
+    default void lock(E entity) {
+        lock(entity, PESSIMISTIC_WRITE);
+    }
+
+    /**
+     * Configures a lock on an entity.
+     *
+     * @param entity The entity
+     * @param lockMode The lock mode
+     */
+    void lock(E entity, LockModeType lockMode);
 
     /**
      * Gets the reference to an entity of the current repository, whose state is lazily fetched.
