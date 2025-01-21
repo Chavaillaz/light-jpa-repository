@@ -71,8 +71,9 @@ public interface Repository<E extends Identifiable<I>, I> {
     /**
      * Gets the reference to an entity, whose state is lazily fetched.
      *
-     * @param type The entity type
+     * @param type The entity class
      * @param id   The entity identifier
+     * @param <T>  The entity type
      * @return The reference to the entity
      */
     <T> T getReference(Class<T> type, Object id);
