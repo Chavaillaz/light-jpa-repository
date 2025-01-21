@@ -119,7 +119,7 @@ public class ApplicationService {
     }
 
     public void decommission(String reference) {
-        return applicationRepository.findByReference(reference)
+        applicationRepository.findByReference(reference)
                 .ifPresent(app -> app.setStatus("DECOMMISSIONED"));
     }
 
@@ -139,7 +139,7 @@ public class ApplicationService implements ApplicationRepository {
     private ApplicationRepository applicationRepository;
     
     public void decommission(String reference) {
-        return findByReference(reference)
+        findByReference(reference)
                 .ifPresent(app -> app.setStatus("DECOMMISSIONED"));
     }
 
