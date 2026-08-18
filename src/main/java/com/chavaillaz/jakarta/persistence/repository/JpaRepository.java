@@ -12,11 +12,12 @@ import java.lang.annotation.Target;
 import jakarta.inject.Qualifier;
 
 /**
- * Qualifier to inject a repository.
+ * Qualifier of the CDI beans related to the JPA based repositories, used to disambiguate an injection point when
+ * several implementations of the same collaborator coexist.
  */
 @Qualifier
 @Retention(RUNTIME)
-@Target({METHOD, FIELD, PARAMETER, TYPE})
+@Target({ METHOD, FIELD, PARAMETER, TYPE })
 public @interface JpaRepository {
 
 }
