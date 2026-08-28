@@ -130,7 +130,6 @@ public class RsqlQueries<E> {
      *
      * @param rsql The RSQL query
      * @return The corresponding node
-     *
      * @throws RSQLParserException if the query is not valid RSQL
      */
     public Node parse(String rsql) {
@@ -144,7 +143,6 @@ public class RsqlQueries<E> {
      *
      * @param rsqlNode The RSQL query to resolve
      * @return The corresponding query, its selectors replaced by the resolved entity attribute paths
-     *
      * @throws IllegalArgumentException if the query refers to a property that is not searchable
      * @see EntityOrdering#resolveProperty(String)
      */
@@ -179,7 +177,6 @@ public class RsqlQueries<E> {
      * @param pageable The requested page and ordering, {@link Pageable#UNPAGED} to return all the matching
      *                 entities with the default ordering of the repository
      * @return The entities of the requested page with the total number of matching entities
-     *
      * @throws IllegalArgumentException if the query refers to a property that is not searchable, or if the
      *                                  requested ordering refers to an unknown property or to a collection
      */
@@ -199,7 +196,6 @@ public class RsqlQueries<E> {
      *
      * @param rsqlNode The parsed RSQL query
      * @return The total number of matching entities
-     *
      * @throws IllegalArgumentException if the query refers to a property that is not searchable
      */
     public long count(Node rsqlNode) {
@@ -218,7 +214,6 @@ public class RsqlQueries<E> {
      * @param rsqlNode The parsed RSQL query
      * @param cursor   The requested position, size and ordering
      * @return The corresponding page with the tokens of the surrounding ones
-     *
      * @throws IllegalArgumentException if the query refers to a property that is not searchable, if the ordering
      *                                  is not usable as a cursor key, if an ordering key of the boundary row is
      *                                  {@code null}, or if the cursor is malformed or was issued for another

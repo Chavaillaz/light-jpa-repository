@@ -24,6 +24,12 @@
  * {@link com.chavaillaz.jakarta.persistence.repository.CursorCodec} to turn the boundary keys into the opaque
  * token exposed to the API consumers, {@link com.chavaillaz.jakarta.persistence.repository.Base64CursorCodec}
  * being the default, overridable implementation.
+ * <p>
+ * The package is {@link org.jspecify.annotations.NullMarked}: every type is non-null unless explicitly annotated
+ * {@link org.jspecify.annotations.Nullable}.
  */
+@NullMarked
 package com.chavaillaz.jakarta.persistence.repository;
+
+import org.jspecify.annotations.NullMarked;
 

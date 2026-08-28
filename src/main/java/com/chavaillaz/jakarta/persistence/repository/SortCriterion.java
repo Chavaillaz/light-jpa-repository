@@ -14,7 +14,9 @@ import jakarta.persistence.metamodel.Attribute;
  * @param property  The property to sort on, a nested property being expressed with a dot, such as {@code team.name}
  * @param ascending The indicator of the direction, {@code true} for an ascending order
  */
-public record SortCriterion(String property, boolean ascending) {
+public record SortCriterion(
+        String property,
+        boolean ascending) {
 
     /**
      * Prefix of a property to sort in descending order.
@@ -54,7 +56,6 @@ public record SortCriterion(String property, boolean ascending) {
      *
      * @param criterion The criterion to parse
      * @return The corresponding criterion
-     *
      * @throws IllegalArgumentException if the property is not a valid property name
      */
     public static SortCriterion parse(String criterion) {

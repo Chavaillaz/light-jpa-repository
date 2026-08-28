@@ -14,6 +14,7 @@ import jakarta.persistence.criteria.Predicate;
 import org.hibernate.query.SelectionQuery;
 import org.hibernate.query.restriction.Restriction;
 import org.hibernate.query.specification.SelectionSpecification;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Typed queries of a repository, built from the Hibernate {@link Restriction restrictions}, which are checked at
@@ -87,10 +88,9 @@ public class EntityQueries<E> {
      * @param criteria    The additional criteria to apply, or {@code null}
      * @param sort        The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The corresponding query
-     *
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      */
-    public SelectionQuery<E> createQuery(Restriction<? super E> restriction, Criteria<E> criteria, Sort sort) {
+    public SelectionQuery<E> createQuery(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort) {
         return SelectionSpecification.create(entityType)
                 .restrict(restriction == null ? unrestricted() : restriction)
                 .augment((criteriaBuilder, query, root) -> {
@@ -111,11 +111,10 @@ public class EntityQueries<E> {
      * @param pageable    The requested page and ordering, {@link Pageable#UNPAGED} to return all the matching
      *                    entities with the default ordering of the repository
      * @return The entities of the requested page with the total number of matching entities
-     *
      * @throws IllegalArgumentException if the requested ordering refers to an unknown property or to a collection
      * @see #createQuery(Restriction, Criteria, Sort)
      */
-    public PaginationResult<E> search(Restriction<? super E> restriction, Criteria<E> criteria, Pageable pageable) {
+    public PaginationResult<E> search(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Pageable pageable) {
         SelectionQuery<E> query = createQuery(restriction, criteria, pageable.sort());
 
         if (pageable.isPaginated()) {
@@ -137,7 +136,7 @@ public class EntityQueries<E> {
      *                    the entities
      * @return The matching entities
      */
-    public <R> List<R> search(Class<R> relatedType, Restriction<? super R> restriction) {
+    public <R> List<R> search(Class<R> relatedType, @Nullable Restriction<? super R> restriction) {
         return SelectionSpecification.create(relatedType)
                 .restrict(restriction == null ? unrestricted() : restriction)
                 .createQuery(entityManager)
@@ -152,7 +151,7 @@ public class EntityQueries<E> {
      * @param criteria    The additional criteria to apply, or {@code null}
      * @return The total number of matching entities
      */
-    public long count(Restriction<? super E> restriction, Criteria<E> criteria) {
+    public long count(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
         return createQuery(restriction, criteria, Sort.NONE).getResultCount();
     }
 
@@ -166,11 +165,10 @@ public class EntityQueries<E> {
      * @param criteria    The additional criteria to apply, or {@code null}
      * @param sort        The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The corresponding entity, or {@link Optional#empty()} if none matches
-     *
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      * @see #createQuery(Restriction, Criteria, Sort)
      */
-    public Optional<E> first(Restriction<? super E> restriction, Criteria<E> criteria, Sort sort) {
+    public Optional<E> first(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort) {
         // A plain list is used rather than getResultStream(), which the caller would have to close explicitly
         return createQuery(restriction, criteria, sort)
                 .setMaxResults(1)
@@ -186,12 +184,11 @@ public class EntityQueries<E> {
      * @param criteria    The additional criteria to apply, or {@code null}
      * @param cursor      The requested position, size and ordering
      * @return The corresponding page with the tokens of the surrounding ones
-     *
      * @throws IllegalArgumentException if the ordering is not usable as a cursor key, if an ordering key of the
      *                                  boundary row is {@code null}, or if the cursor is malformed or was issued
      *                                  for another ordering
      */
-    public CursorResult<E> scroll(Restriction<? super E> restriction, Criteria<E> criteria, Cursor cursor) {
+    public CursorResult<E> scroll(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Cursor cursor) {
         Sort resolvedSort = ordering.resolveSort(cursor.sort());
         CursorPosition position = Cursors.position(cursorCodec, cursor, resolvedSort);
         Sort direction = Cursors.direction(resolvedSort, position);

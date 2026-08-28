@@ -3,6 +3,8 @@ package com.chavaillaz.jakarta.persistence.repository;
 import java.util.List;
 import java.util.function.Function;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Page of results returned by a cursor query, carrying the tokens to navigate to the surrounding pages.
  * <p>
@@ -20,8 +22,8 @@ import java.util.function.Function;
 public record CursorResult<T>(
         List<T> items,
         int size,
-        String next,
-        String previous,
+        @Nullable String next,
+        @Nullable String previous,
         boolean hasNext,
         boolean hasPrevious) {
 

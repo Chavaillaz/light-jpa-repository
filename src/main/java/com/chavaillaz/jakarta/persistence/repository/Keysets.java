@@ -12,6 +12,7 @@ import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import org.hibernate.Hibernate;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Keyset helpers shared by the query collaborators, building the {@code ORDER BY} clause, the seek predicate and
@@ -62,7 +63,6 @@ public final class Keysets {
      * @param sort            The resolved ordering, already reversed when walking backwards
      * @param values          The textual keys of the boundary row, in the ordering order
      * @return The corresponding predicate
-     *
      * @throws IllegalArgumentException if the keys do not match the ordering
      */
     public static Predicate seek(CriteriaBuilder criteriaBuilder, From<?, ?> root, Sort sort, List<String> values) {
@@ -89,7 +89,6 @@ public final class Keysets {
      * @param entity The entity of the boundary row of the page
      * @param sort   The resolved ordering
      * @return The textual keys, in the ordering order
-     *
      * @throws IllegalArgumentException if one of the keys is {@code null} or cannot be read on the entity, a
      *                                  nullable attribute being unusable as a cursor key since the databases do
      *                                  not agree on where the nulls sort
@@ -147,7 +146,6 @@ public final class Keysets {
      * @param criterion The ordering criterion the key belongs to
      * @param value     The textual key of the boundary row
      * @return The corresponding predicate
-     *
      * @throws IllegalArgumentException if the type of the attribute is not a supported cursor key type
      */
     private static <Y extends Comparable<? super Y>> Predicate after(CriteriaBuilder builder, From<?, ?> root, SortCriterion criterion, String value) {
@@ -156,7 +154,7 @@ public final class Keysets {
         return criterion.ascending() ? builder.greaterThan(path, bound) : builder.lessThan(path, bound);
     }
 
-    private static Object read(Object entity, String property) {
+    private static @Nullable Object read(Object entity, String property) {
         Object value = entity;
         for (String attribute : split(property)) {
             if (value == null) {
@@ -167,7 +165,7 @@ public final class Keysets {
         return value;
     }
 
-    private static Object readAttribute(Object owner, String attribute) {
+    private static @Nullable Object readAttribute(Object owner, String attribute) {
         // Only the first and the last rows of a page are read, so the plain reflection stays negligible
         String capitalized = Character.toUpperCase(attribute.charAt(0)) + attribute.substring(1);
         for (Class<?> type = owner.getClass(); type != null; type = type.getSuperclass()) {

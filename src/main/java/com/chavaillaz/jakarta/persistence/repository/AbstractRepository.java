@@ -23,6 +23,7 @@ import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Root;
 import jakarta.transaction.Transactional;
 import org.hibernate.query.restriction.Restriction;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Base implementation of the {@link Repository} contract, relying on the JPA {@link EntityManager}.
@@ -63,17 +64,17 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     /**
      * @see #ordering()
      */
-    private EntityOrdering<E> ordering;
+    private @Nullable EntityOrdering<E> ordering;
 
     /**
      * @see #queries()
      */
-    private EntityQueries<E> queries;
+    private @Nullable EntityQueries<E> queries;
 
     /**
      * @see #rsqlQueries()
      */
-    private RsqlQueries<E> rsqlQueries;
+    private @Nullable RsqlQueries<E> rsqlQueries;
 
     /**
      * Creates a repository using the default RSQL parser.
@@ -147,12 +148,12 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     }
 
     @Override
-    public Optional<E> findById(I id) {
+    public Optional<E> findById(@Nullable I id) {
         return Optional.ofNullable(id).map(identifier -> entityManager.find(entityType, identifier));
     }
 
     @Override
-    public PaginationResult<E> search(String rsql, Pageable pageable) {
+    public PaginationResult<E> search(@Nullable String rsql, Pageable pageable) {
         if (isBlank(rsql)) {
             return findAll(pageable);
         }
@@ -161,7 +162,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     }
 
     @Override
-    public CursorResult<E> search(String rsql, Cursor cursor) {
+    public CursorResult<E> search(@Nullable String rsql, Cursor cursor) {
         if (isBlank(rsql)) {
             return findAll(cursor);
         }
@@ -175,43 +176,42 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * The total number of matching items is derived from the very same restriction, so that the count can never
      * drift away from the results, as it does when both are written as two separate queries.
      *
-     * @param restriction The restriction to apply, {@link Restriction#unrestricted()} to match all the entities
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
+     *                    the entities
      * @param pageable    The requested page and ordering, {@link Pageable#UNPAGED} to return all the matching
      *                    entities with the default ordering of the repository
      * @return The entities of the requested page with the total number of matching entities
-     *
      * @throws IllegalArgumentException if the requested ordering refers to an unknown property or to a collection
      */
-    protected PaginationResult<E> search(Restriction<? super E> restriction, Pageable pageable) {
+    protected PaginationResult<E> search(@Nullable Restriction<? super E> restriction, Pageable pageable) {
         return queries().search(restriction, null, pageable);
     }
 
     /**
      * Searches for the entities matching the given restriction and additional criteria.
      *
-     * @param restriction The restriction to apply, {@link Restriction#unrestricted()} to match all the entities
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
+     *                    the entities
      * @param criteria    The additional criteria to apply, or {@code null}
      * @param pageable    The requested page and ordering, {@link Pageable#UNPAGED} to return all the matching
      *                    entities with the default ordering of the repository
      * @return The entities of the requested page with the total number of matching entities
-     *
      * @see #search(Restriction, Pageable)
      */
-    protected PaginationResult<E> search(Restriction<? super E> restriction, Criteria<E> criteria, Pageable pageable) {
+    protected PaginationResult<E> search(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Pageable pageable) {
         return queries().search(restriction, criteria, pageable);
     }
 
     /**
      * Searches for the entities matching the given criteria only, for the queries a restriction cannot express.
      *
-     * @param criteria The criteria to apply
+     * @param criteria The criteria to apply, or {@code null} to match all the entities
      * @param pageable The requested page and ordering, {@link Pageable#UNPAGED} to return all the matching
      *                 entities with the default ordering of the repository
      * @return The entities of the requested page with the total number of matching entities
-     *
      * @see #search(Restriction, Criteria, Pageable)
      */
-    protected PaginationResult<E> search(Criteria<E> criteria, Pageable pageable) {
+    protected PaginationResult<E> search(@Nullable Criteria<E> criteria, Pageable pageable) {
         return queries().search(null, criteria, pageable);
     }
 
@@ -219,12 +219,12 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * Searches for all the entities matching the given restriction, following the default ordering of the
      * repository, with no pagination.
      *
-     * @param restriction The restriction to apply, {@link Restriction#unrestricted()} to match all the entities
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
+     *                    the entities
      * @return The matching entities
-     *
      * @see #search(Restriction, Pageable)
      */
-    protected List<E> search(Restriction<? super E> restriction) {
+    protected List<E> search(@Nullable Restriction<? super E> restriction) {
         return queries().search(restriction, null, unpaged()).items();
     }
 
@@ -235,27 +235,26 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * The pagination is not the only reason to order a query, so the ordering stays usable on its own, without
      * having to build a {@link Pageable}.
      *
-     * @param restriction The restriction to apply, {@link Restriction#unrestricted()} to match all the entities
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
+     *                    the entities
      * @param sort        The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The matching entities
-     *
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      */
-    protected List<E> search(Restriction<? super E> restriction, Sort sort) {
+    protected List<E> search(@Nullable Restriction<? super E> restriction, Sort sort) {
         return queries().search(restriction, null, sortedBy(sort)).items();
     }
 
     /**
      * Searches for the entities matching the given criteria only, following the requested ordering.
      *
-     * @param criteria The criteria to apply
+     * @param criteria The criteria to apply, or {@code null} to match all the entities
      * @param sort     The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The matching entities
-     *
      * @see #search(Restriction, Sort)
      * @see #search(Criteria, Pageable)
      */
-    protected List<E> search(Criteria<E> criteria, Sort sort) {
+    protected List<E> search(@Nullable Criteria<E> criteria, Sort sort) {
         return queries().search(null, criteria, sortedBy(sort)).items();
     }
 
@@ -263,13 +262,13 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * Searches for all the entities matching the given restriction and additional criteria, following the default
      * ordering of the repository, with no pagination.
      *
-     * @param restriction The restriction to apply, {@link Restriction#unrestricted()} to match all the entities
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
+     *                    the entities
      * @param criteria    The additional criteria to apply, or {@code null}
      * @return The matching entities
-     *
      * @see #search(Restriction, Criteria, Pageable)
      */
-    protected List<E> search(Restriction<? super E> restriction, Criteria<E> criteria) {
+    protected List<E> search(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
         return queries().search(restriction, criteria, unpaged()).items();
     }
 
@@ -277,12 +276,11 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * Searches for the entities matching the given criteria only, following the default ordering of the repository,
      * with no pagination.
      *
-     * @param criteria The criteria to apply
+     * @param criteria The criteria to apply, or {@code null} to match all the entities
      * @return The matching entities
-     *
      * @see #search(Criteria, Pageable)
      */
-    protected List<E> search(Criteria<E> criteria) {
+    protected List<E> search(@Nullable Criteria<E> criteria) {
         return queries().search(null, criteria, unpaged()).items();
     }
 
@@ -292,12 +290,12 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      *
      * @param <R>         The type of the related entity
      * @param relatedType The type of the related entity
-     * @param restriction The restriction to apply, {@link Restriction#unrestricted()} to match all the entities
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
+     *                    the entities
      * @return The matching entities
-     *
      * @see EntityQueries#search(Class, Restriction)
      */
-    protected <R> List<R> search(Class<R> relatedType, Restriction<? super R> restriction) {
+    protected <R> List<R> search(Class<R> relatedType, @Nullable Restriction<? super R> restriction) {
         return queries().search(relatedType, restriction);
     }
 
@@ -307,10 +305,9 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
      * @param cursor      The requested position, size and ordering
      * @return The corresponding page with the tokens of the surrounding ones, never {@code null}
-     *
      * @see #scroll(Restriction, Criteria, Cursor)
      */
-    protected CursorResult<E> scroll(Restriction<? super E> restriction, Cursor cursor) {
+    protected CursorResult<E> scroll(@Nullable Restriction<? super E> restriction, Cursor cursor) {
         return queries().scroll(restriction, null, cursor);
     }
 
@@ -323,10 +320,9 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @param criteria The criteria to apply, {@code null} to match all the entities
      * @param cursor   The requested position, size and ordering
      * @return The corresponding page with the tokens of the surrounding ones, never {@code null}
-     *
      * @see #scroll(Restriction, Criteria, Cursor)
      */
-    protected CursorResult<E> scroll(Criteria<E> criteria, Cursor cursor) {
+    protected CursorResult<E> scroll(@Nullable Criteria<E> criteria, Cursor cursor) {
         return queries().scroll(null, criteria, cursor);
     }
 
@@ -343,12 +339,11 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @param criteria    The additional criteria to apply, or {@code null}
      * @param cursor      The requested position, size and ordering
      * @return The corresponding page with the tokens of the surrounding ones, never {@code null}
-     *
      * @throws IllegalArgumentException if the ordering is not usable as a cursor key, if an ordering key of the
      *                                  boundary row is {@code null}, or if the cursor is malformed or was issued
      *                                  for another ordering
      */
-    protected CursorResult<E> scroll(Restriction<? super E> restriction, Criteria<E> criteria, Cursor cursor) {
+    protected CursorResult<E> scroll(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Cursor cursor) {
         return queries().scroll(restriction, criteria, cursor);
     }
 
@@ -358,7 +353,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     }
 
     @Override
-    public long count(String rsql) {
+    public long count(@Nullable String rsql) {
         if (isBlank(rsql)) {
             return count();
         }
@@ -371,7 +366,6 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      *
      * @param rsqlNode The parsed RSQL query
      * @return The total number of matching entities
-     *
      * @see RsqlQueries#count(Node)
      */
     protected long count(Node rsqlNode) {
@@ -381,47 +375,46 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     /**
      * Counts the entities matching the given restriction.
      *
-     * @param restriction The restriction to apply, {@link Restriction#unrestricted()} to count all the entities
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to count all
+     *                    the entities
      * @return The total number of matching entities
-     *
      * @see #count(Restriction, Criteria)
      */
-    protected long count(Restriction<? super E> restriction) {
+    protected long count(@Nullable Restriction<? super E> restriction) {
         return queries().count(restriction, null);
     }
 
     /**
      * Counts the entities matching the given restriction and additional criteria.
      *
-     * @param restriction The restriction to apply, {@link Restriction#unrestricted()} to count all the entities
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to count all
+     *                    the entities
      * @param criteria    The additional criteria to apply, or {@code null}
      * @return The total number of matching entities
      */
-    protected long count(Restriction<? super E> restriction, Criteria<E> criteria) {
+    protected long count(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
         return queries().count(restriction, criteria);
     }
 
     /**
      * Counts the entities matching the given criteria only.
      *
-     * @param criteria The criteria to apply
+     * @param criteria The criteria to apply, or {@code null} to count all the entities
      * @return The total number of matching entities
-     *
      * @see #count(Restriction, Criteria)
      */
-    protected long count(Criteria<E> criteria) {
+    protected long count(@Nullable Criteria<E> criteria) {
         return queries().count(null, criteria);
     }
 
     /**
      * Gets the first entity matching the given restriction, following the default ordering of the repository.
      *
-     * @param restriction The restriction to apply
+     * @param restriction The restriction to apply, or {@code null}
      * @return The corresponding entity, or {@link Optional#empty()} if none matches
-     *
      * @see #first(Restriction, Criteria, Sort)
      */
-    protected Optional<E> first(Restriction<? super E> restriction) {
+    protected Optional<E> first(@Nullable Restriction<? super E> restriction) {
         return queries().first(restriction, null, Sort.NONE);
     }
 
@@ -429,13 +422,12 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * Gets the first entity matching the given restriction and additional criteria, following the default ordering
      * of the repository.
      *
-     * @param restriction The restriction to apply
+     * @param restriction The restriction to apply, or {@code null}
      * @param criteria    The additional criteria to apply, or {@code null}
      * @return The corresponding entity, or {@link Optional#empty()} if none matches
-     *
      * @see #first(Restriction, Criteria, Sort)
      */
-    protected Optional<E> first(Restriction<? super E> restriction, Criteria<E> criteria) {
+    protected Optional<E> first(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
         return queries().first(restriction, criteria, Sort.NONE);
     }
 
@@ -445,39 +437,36 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * <p>
      * Only the first row is fetched, the ordering making it deterministic.
      *
-     * @param restriction The restriction to apply
+     * @param restriction The restriction to apply, or {@code null}
      * @param criteria    The additional criteria to apply, or {@code null}
      * @param sort        The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The corresponding entity, or {@link Optional#empty()} if none matches
-     *
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      */
-    protected Optional<E> first(Restriction<? super E> restriction, Criteria<E> criteria, Sort sort) {
+    protected Optional<E> first(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort) {
         return queries().first(restriction, criteria, sort);
     }
 
     /**
      * Gets the first entity matching the given criteria only, following the default ordering of the repository.
      *
-     * @param criteria The criteria to apply
+     * @param criteria The criteria to apply, or {@code null} to match all the entities
      * @return The corresponding entity, or {@link Optional#empty()} if none matches
-     *
      * @see #first(Criteria, Sort)
      */
-    protected Optional<E> first(Criteria<E> criteria) {
+    protected Optional<E> first(@Nullable Criteria<E> criteria) {
         return queries().first(null, criteria, Sort.NONE);
     }
 
     /**
      * Gets the first entity matching the given criteria only, following the requested ordering.
      *
-     * @param criteria The criteria to apply
+     * @param criteria The criteria to apply, or {@code null} to match all the entities
      * @param sort     The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The corresponding entity, or {@link Optional#empty()} if none matches
-     *
      * @see #first(Restriction, Criteria, Sort)
      */
-    protected Optional<E> first(Criteria<E> criteria, Sort sort) {
+    protected Optional<E> first(@Nullable Criteria<E> criteria, Sort sort) {
         return queries().first(null, criteria, sort);
     }
 
@@ -557,12 +546,12 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     }
 
     @Override
-    public E getReference(I id) {
+    public @Nullable E getReference(@Nullable I id) {
         return getReference(entityType, id);
     }
 
     @Override
-    public <T extends Identifiable<K>, K> T getReference(Class<T> type, K identifier) {
+    public <T extends Identifiable<K>, K> @Nullable T getReference(Class<T> type, @Nullable K identifier) {
         return Optional.ofNullable(identifier)
                 .map(id -> entityManager.getReference(type, id))
                 .orElse(null);

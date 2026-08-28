@@ -13,7 +13,10 @@ import java.util.List;
  * @param backward    The indicator of the direction, {@code true} when the previous page is requested
  * @param fingerprint The fingerprint of the resolved ordering the token was issued for
  */
-public record CursorPosition(List<String> values, boolean backward, String fingerprint) {
+public record CursorPosition(
+        List<String> values,
+        boolean backward,
+        String fingerprint) {
 
     /**
      * Defaults a {@code null} list of values to an empty one; {@link List#copyOf} otherwise rejects a {@code null}

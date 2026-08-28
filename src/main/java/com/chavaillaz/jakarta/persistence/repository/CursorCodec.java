@@ -52,7 +52,6 @@ public interface CursorCodec {
      * @param token The token returned by a previous call to {@link #encode(CursorPosition)}, as received from the
      *              consumer
      * @return The corresponding position, never {@code null}
-     *
      * @throws IllegalArgumentException if the token is malformed, truncated, was not produced by this codec or
      *                                  fails its integrity check, typically surfaced as a {@code 400 Bad Request}
      *                                  by the API layer

@@ -4,6 +4,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Cursor helpers shared by the query collaborators of the repositories.
  * <p>
@@ -25,10 +27,9 @@ public final class Cursors {
      * @param cursor       The requested position, size and ordering
      * @param resolvedSort The resolved ordering the token is checked against
      * @return The requested position, or {@code null} when the first page is requested
-     *
      * @throws IllegalArgumentException if the token is malformed or was issued for another ordering
      */
-    public static CursorPosition position(CursorCodec codec, Cursor cursor, Sort resolvedSort) {
+    public static @Nullable CursorPosition position(CursorCodec codec, Cursor cursor, Sort resolvedSort) {
         if (cursor.isFirst()) {
             return null;
         }
@@ -48,7 +49,7 @@ public final class Cursors {
      * @param position     The requested position, or {@code null} for the first page
      * @return The ordering to apply to the query
      */
-    public static Sort direction(Sort resolvedSort, CursorPosition position) {
+    public static Sort direction(Sort resolvedSort, @Nullable CursorPosition position) {
         return isBackward(position) ? resolvedSort.reversed() : resolvedSort;
     }
 
@@ -58,7 +59,7 @@ public final class Cursors {
      * @param position The requested position, or {@code null} for the first page
      * @return {@code true} when walking backwards, {@code false} otherwise
      */
-    public static boolean isBackward(CursorPosition position) {
+    public static boolean isBackward(@Nullable CursorPosition position) {
         return position != null && position.backward();
     }
 
@@ -76,7 +77,7 @@ public final class Cursors {
      * @param position     The requested position, or {@code null} for the first page
      * @return The corresponding page, with the tokens of the surrounding ones
      */
-    public static <T> CursorResult<T> toResult(CursorCodec codec, List<T> fetched, Cursor cursor, Sort resolvedSort, CursorPosition position) {
+    public static <T> CursorResult<T> toResult(CursorCodec codec, List<T> fetched, Cursor cursor, Sort resolvedSort, @Nullable CursorPosition position) {
         boolean backward = isBackward(position);
         boolean hasMore = fetched.size() > cursor.size();
 

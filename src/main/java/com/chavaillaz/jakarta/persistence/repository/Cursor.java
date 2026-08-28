@@ -2,6 +2,8 @@ package com.chavaillaz.jakarta.persistence.repository;
 
 import static org.apache.commons.lang3.StringUtils.isBlank;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Slice of results requested with a cursor, made of the opaque position of the previous page, of the number of
  * items to return and of the ordering to apply.
@@ -17,7 +19,10 @@ import static org.apache.commons.lang3.StringUtils.isBlank;
  * @param size  The number of items per page, capped to {@value #MAX_SIZE}
  * @param sort  The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
  */
-public record Cursor(String token, int size, Sort sort) {
+public record Cursor(
+        @Nullable String token,
+        int size,
+        Sort sort) {
 
     /**
      * Number of items returned when the consumer requests none.
@@ -46,7 +51,7 @@ public record Cursor(String token, int size, Sort sort) {
      * @param sort  The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The corresponding request
      */
-    public static Cursor of(String token, Integer size, Sort sort) {
+    public static Cursor of(@Nullable String token, @Nullable Integer size, Sort sort) {
         return new Cursor(token, size == null ? DEFAULT_SIZE : size, sort);
     }
 
@@ -57,7 +62,7 @@ public record Cursor(String token, int size, Sort sort) {
      * @param sort The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The corresponding request
      */
-    public static Cursor first(Integer size, Sort sort) {
+    public static Cursor first(@Nullable Integer size, Sort sort) {
         return of(null, size, sort);
     }
 

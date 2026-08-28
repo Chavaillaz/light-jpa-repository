@@ -12,6 +12,7 @@ import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 
 import org.hibernate.query.restriction.Restriction;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Additional criteria of a query, expressed with the criteria API so that the constructs the
@@ -41,7 +42,7 @@ public interface Criteria<T> {
      * @return The combined criteria, or {@code null} when none is given or all the given ones are {@code null}
      */
     @SafeVarargs
-    static <T> Criteria<T> anyOf(Criteria<T>... criteria) {
+    static <T> @Nullable Criteria<T> anyOf(@Nullable Criteria<T>... criteria) {
         return combine(CriteriaBuilder::or, criteria);
     }
 
@@ -53,7 +54,7 @@ public interface Criteria<T> {
      * @return The combined criteria, or {@code null} when none is given or all the given ones are {@code null}
      */
     @SafeVarargs
-    static <T> Criteria<T> allOf(Criteria<T>... criteria) {
+    static <T> @Nullable Criteria<T> allOf(@Nullable Criteria<T>... criteria) {
         return combine(CriteriaBuilder::and, criteria);
     }
 
@@ -66,7 +67,7 @@ public interface Criteria<T> {
      * @return The combined criteria, or {@code null} when none is given or all the given ones are {@code null}
      */
     @SafeVarargs
-    private static <T> Criteria<T> combine(BiFunction<CriteriaBuilder, Predicate[], Predicate> operator, Criteria<T>... criteria) {
+    private static <T> @Nullable Criteria<T> combine(BiFunction<CriteriaBuilder, Predicate[], Predicate> operator, @Nullable Criteria<T>... criteria) {
         List<Criteria<T>> present = Stream.of(criteria).filter(Objects::nonNull).toList();
         if (present.isEmpty()) {
             return null;

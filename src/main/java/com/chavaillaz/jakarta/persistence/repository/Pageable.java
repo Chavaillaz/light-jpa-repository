@@ -1,5 +1,7 @@
 package com.chavaillaz.jakarta.persistence.repository;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Slice of results requested for a query, made of the page coordinates and of the ordering to apply.
  * <p>
@@ -14,7 +16,10 @@ package com.chavaillaz.jakarta.persistence.repository;
  * @param size The number of items per page, or {@code null} to disable the pagination
  * @param sort The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
  */
-public record Pageable(Integer page, Integer size, Sort sort) {
+public record Pageable(
+        @Nullable Integer page,
+        @Nullable Integer size,
+        Sort sort) {
 
     /**
      * Unpaged request, returning all the results with the default ordering of the repository.
@@ -35,7 +40,7 @@ public record Pageable(Integer page, Integer size, Sort sort) {
      * @param size The number of items per page, or {@code null} to disable the pagination
      * @return The corresponding request
      */
-    public static Pageable of(Integer page, Integer size) {
+    public static Pageable of(@Nullable Integer page, @Nullable Integer size) {
         return of(page, size, Sort.NONE);
     }
 
@@ -47,7 +52,7 @@ public record Pageable(Integer page, Integer size, Sort sort) {
      * @param sort The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The corresponding request
      */
-    public static Pageable of(Integer page, Integer size, Sort sort) {
+    public static Pageable of(@Nullable Integer page, @Nullable Integer size, Sort sort) {
         return new Pageable(page, size, sort);
     }
 

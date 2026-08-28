@@ -18,6 +18,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Conversion of the cursor keys between their textual representation, which travels within the token, and the
  * Java type of the corresponding attribute, taken from the metamodel when the seek predicate is built.
@@ -57,13 +59,13 @@ public final class CursorValues {
      * Formats a cursor key value into its textual representation, as it travels within the token.
      *
      * @param property The property the value belongs to, used to name it in the error message
-     * @param value    The value to format
+     * @param value    The value to format, {@code null} rejected since a nullable attribute is unusable as a
+     *                 cursor key
      * @return The corresponding textual representation
-     *
      * @throws IllegalArgumentException if the value is {@code null}, a nullable attribute being unusable as a
      *                                  cursor key
      */
-    public static String format(String property, Object value) {
+    public static String format(String property, @Nullable Object value) {
         return switch (value) {
             case null -> throw new IllegalArgumentException("Cannot build a cursor on the null property %s: a cursor key must be non nullable".formatted(property));
             case Enum<?> constant -> constant.name();
@@ -84,7 +86,6 @@ public final class CursorValues {
      * @param value The textual representation of the key, as it travels within the token
      * @param type  The Java type of the attribute, as reported by the metamodel
      * @return The corresponding value
-     *
      * @throws IllegalArgumentException if the type is not a supported cursor key type, or if the value is not a
      *                                  constant of the requested enum type
      */

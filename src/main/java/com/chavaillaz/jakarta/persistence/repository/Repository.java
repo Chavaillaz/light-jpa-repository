@@ -11,6 +11,7 @@ import java.util.stream.Stream;
 
 import com.chavaillaz.jakarta.persistence.Identifiable;
 import cz.jirutka.rsql.parser.RSQLParserException;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Contract of all the repositories, providing the common operations to read, search, persist and delete entities.
@@ -28,7 +29,6 @@ public interface Repository<E extends Identifiable<I>, I> {
      * Gets all the existing entities of the current repository, with no pagination and the default ordering.
      *
      * @return The list of entities
-     *
      * @see Pageable#unpaged()
      */
     default List<E> findAll() {
@@ -41,11 +41,10 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @param page The page number, starting at zero, or {@code null} to disable the pagination
      * @param size The number of items per page, or {@code null} to disable the pagination
      * @return The entities of the requested page with the total number of entities
-     *
      * @see Pageable#of(Integer, Integer)
      * @see #findAll(Pageable)
      */
-    default PaginationResult<E> findAll(Integer page, Integer size) {
+    default PaginationResult<E> findAll(@Nullable Integer page, @Nullable Integer size) {
         return findAll(Pageable.of(page, size));
     }
 
@@ -54,7 +53,6 @@ public interface Repository<E extends Identifiable<I>, I> {
      *
      * @param sort The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The list of entities
-     *
      * @see Pageable#sortedBy(Sort)
      */
     default List<E> findAll(Sort sort) {
@@ -68,11 +66,10 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @param size The number of items per page, or {@code null} to disable the pagination
      * @param sort The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The entities of the requested page with the total number of entities
-     *
      * @see Pageable#of(Integer, Integer, Sort)
      * @see #findAll(Pageable)
      */
-    default PaginationResult<E> findAll(Integer page, Integer size, Sort sort) {
+    default PaginationResult<E> findAll(@Nullable Integer page, @Nullable Integer size, Sort sort) {
         return findAll(Pageable.of(page, size, sort));
     }
 
@@ -82,7 +79,6 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @param pageable The requested page and ordering, {@link Pageable#UNPAGED} to return all the entities with
      *                 the default ordering of the repository
      * @return The entities of the requested page with the total number of entities
-     *
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      */
     PaginationResult<E> findAll(Pageable pageable);
@@ -93,7 +89,6 @@ public interface Repository<E extends Identifiable<I>, I> {
      *
      * @param id The entity identifier
      * @return The corresponding entity, never {@code null}
-     *
      * @throws NoSuchElementException if the entity corresponding to the given identifier does not exist
      * @see #findById(I)
      */
@@ -104,10 +99,10 @@ public interface Repository<E extends Identifiable<I>, I> {
     /**
      * Gets the entity from its identifier.
      *
-     * @param id The entity identifier
+     * @param id The entity identifier, {@code null} never matching any entity
      * @return The corresponding entity, or {@link Optional#empty()} if it does not exist
      */
-    Optional<E> findById(I id);
+    Optional<E> findById(@Nullable I id);
 
     /**
      * Counts all the entities of the current repository.
@@ -121,11 +116,10 @@ public interface Repository<E extends Identifiable<I>, I> {
      *
      * @param rsql The RSQL filter expression, {@code null} or blank to count all the entities
      * @return The number of matching entities
-     *
      * @throws RSQLParserException      if the expression is not valid RSQL
      * @throws IllegalArgumentException if the expression refers to a property that is not searchable
      */
-    long count(String rsql);
+    long count(@Nullable String rsql);
 
     /**
      * Searches for entities matching the given RSQL filter expression, with no pagination and the default
@@ -133,10 +127,9 @@ public interface Repository<E extends Identifiable<I>, I> {
      *
      * @param rsql The RSQL filter expression, {@code null} or blank to match all the entities
      * @return The corresponding entities
-     *
      * @see #search(String, Pageable)
      */
-    default List<E> search(String rsql) {
+    default List<E> search(@Nullable String rsql) {
         return search(rsql, Pageable.UNPAGED).items();
     }
 
@@ -146,11 +139,10 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @param rsql The RSQL filter expression, {@code null} or blank to match all the entities
      * @param sort The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The corresponding entities
-     *
      * @see Pageable#sortedBy(Sort)
      * @see #search(String, Pageable)
      */
-    default List<E> search(String rsql, Sort sort) {
+    default List<E> search(@Nullable String rsql, Sort sort) {
         return search(rsql, sortedBy(sort)).items();
     }
 
@@ -162,11 +154,10 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @param page The page number, starting at zero, or {@code null} to disable the pagination
      * @param size The number of items per page, or {@code null} to disable the pagination
      * @return The entities of the requested page with the total number of matching entities
-     *
      * @see Pageable#of(Integer, Integer)
      * @see #search(String, Pageable)
      */
-    default PaginationResult<E> search(String rsql, Integer page, Integer size) {
+    default PaginationResult<E> search(@Nullable String rsql, @Nullable Integer page, @Nullable Integer size) {
         return search(rsql, Pageable.of(page, size));
     }
 
@@ -178,11 +169,10 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @param size The number of items per page, or {@code null} to disable the pagination
      * @param sort The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The entities of the requested page with the total number of matching entities
-     *
      * @see Pageable#of(Integer, Integer, Sort)
      * @see #search(String, Pageable)
      */
-    default PaginationResult<E> search(String rsql, Integer page, Integer size, Sort sort) {
+    default PaginationResult<E> search(@Nullable String rsql, @Nullable Integer page, @Nullable Integer size, Sort sort) {
         return search(rsql, Pageable.of(page, size, sort));
     }
 
@@ -192,12 +182,11 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @param rsql     The RSQL filter expression, {@code null} or blank to match all the entities
      * @param pageable The requested page and ordering, {@link Pageable#UNPAGED} to disable the pagination
      * @return The corresponding page, never {@code null}
-     *
      * @throws RSQLParserException      if the expression is not valid RSQL
      * @throws IllegalArgumentException if the expression refers to a property that is not searchable, or if the
      *                                  requested ordering is not usable
      */
-    PaginationResult<E> search(String rsql, Pageable pageable);
+    PaginationResult<E> search(@Nullable String rsql, Pageable pageable);
 
     /**
      * Scrolls through all the existing entities of the current repository, seeking to the requested position
@@ -208,7 +197,6 @@ public interface Repository<E extends Identifiable<I>, I> {
      *
      * @param cursor The requested position, size and ordering
      * @return The corresponding page with the tokens of the surrounding ones
-     *
      * @throws IllegalArgumentException if the ordering refers to an unknown property, to a collection, or if the
      *                                  cursor is malformed or was issued for another ordering
      */
@@ -222,11 +210,10 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @param size   The number of items per page, or {@code null} to apply {@link Cursor#DEFAULT_SIZE}
      * @param sort   The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The corresponding page with the tokens of the surrounding ones
-     *
      * @see Cursor#of(String, Integer, Sort)
      * @see #findAll(Cursor)
      */
-    default CursorResult<E> findAll(String cursor, Integer size, Sort sort) {
+    default CursorResult<E> findAll(@Nullable String cursor, @Nullable Integer size, Sort sort) {
         return findAll(Cursor.of(cursor, size, sort));
     }
 
@@ -244,7 +231,6 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @param sort     The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @param pageSize The number of items fetched per underlying page, capped to {@link Cursor#MAX_SIZE}
      * @return The lazy stream of every matching entity, in the requested ordering
-     *
      * @throws IllegalArgumentException if the ordering is not usable as a cursor key
      * @see #findAll(Cursor)
      */
@@ -259,7 +245,6 @@ public interface Repository<E extends Identifiable<I>, I> {
      *
      * @param sort The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The lazy stream of every matching entity, in the requested ordering
-     *
      * @see #streamAll(Sort, int)
      */
     default Stream<E> streamAll(Sort sort) {
@@ -271,7 +256,6 @@ public interface Repository<E extends Identifiable<I>, I> {
      * applying {@link Cursor#DEFAULT_SIZE}.
      *
      * @return The lazy stream of every matching entity
-     *
      * @see #streamAll(Sort, int)
      */
     default Stream<E> streamAll() {
@@ -285,13 +269,12 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @param rsql   The RSQL filter expression, {@code null} or blank to match all the entities
      * @param cursor The requested position, size and ordering
      * @return The corresponding page with the tokens of the surrounding ones
-     *
      * @throws RSQLParserException      if the expression is not valid RSQL
      * @throws IllegalArgumentException if the expression refers to a property that is not searchable, if the
      *                                  ordering refers to an unknown property, to a collection, or if the cursor
      *                                  is malformed or was issued for another ordering
      */
-    CursorResult<E> search(String rsql, Cursor cursor);
+    CursorResult<E> search(@Nullable String rsql, Cursor cursor);
 
     /**
      * Scrolls through the entities matching the given RSQL filter expression, seeking to the requested position
@@ -302,11 +285,10 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @param size   The number of items per page, or {@code null} to apply {@link Cursor#DEFAULT_SIZE}
      * @param sort   The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The corresponding page with the tokens of the surrounding ones
-     *
      * @see Cursor#of(String, Integer, Sort)
      * @see #search(String, Cursor)
      */
-    default CursorResult<E> search(String rsql, String cursor, Integer size, Sort sort) {
+    default CursorResult<E> search(@Nullable String rsql, @Nullable String cursor, @Nullable Integer size, Sort sort) {
         return search(rsql, Cursor.of(cursor, size, sort));
     }
 
@@ -317,7 +299,6 @@ public interface Repository<E extends Identifiable<I>, I> {
      * A detached entity is re-attached beforehand, the lock then applying to the managed copy.
      *
      * @param entity The entity to lock
-     *
      * @throws NoSuchElementException if the entity is detached and no entity with its identifier exists
      */
     void lock(E entity);
@@ -328,7 +309,6 @@ public interface Repository<E extends Identifiable<I>, I> {
      * Unlike {@link #lock(Identifiable)}, a detached entity is not re-attached beforehand.
      *
      * @param entity The entity to refresh, which must be managed
-     *
      * @throws IllegalArgumentException if the entity is not managed by the current persistence context
      */
     void refresh(E entity);
@@ -338,10 +318,9 @@ public interface Repository<E extends Identifiable<I>, I> {
      *
      * @param id The entity identifier
      * @return The reference to the entity, or {@code null} if the given identifier is {@code null}
-     *
      * @see #getReference(Class, Object)
      */
-    E getReference(I id);
+    @Nullable E getReference(@Nullable I id);
 
     /**
      * Gets the reference to an entity, whose state is lazily fetched.
@@ -352,7 +331,7 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @param id   The entity identifier
      * @return The reference to the entity, or {@code null} if the given identifier is {@code null}
      */
-    <T extends Identifiable<K>, K> T getReference(Class<T> type, K id);
+    <T extends Identifiable<K>, K> @Nullable T getReference(Class<T> type, @Nullable K id);
 
     /**
      * Saves the given entity, persisting it when it has no identifier yet, merging it otherwise.

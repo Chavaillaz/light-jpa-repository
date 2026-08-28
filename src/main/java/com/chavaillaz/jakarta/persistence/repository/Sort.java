@@ -16,7 +16,8 @@ import org.apache.commons.lang3.StringUtils;
  *
  * @param criteria The criteria to apply, in order of precedence
  */
-public record Sort(List<SortCriterion> criteria) {
+public record Sort(
+        List<SortCriterion> criteria) {
 
     /**
      * Empty ordering, letting the repository apply its own default ordering.
@@ -52,7 +53,6 @@ public record Sort(List<SortCriterion> criteria) {
      *
      * @param sort The ordering to parse, {@link #NONE} being returned when blank
      * @return The corresponding ordering
-     *
      * @throws IllegalArgumentException if one of the properties is not a valid property name
      */
     public static Sort parse(String sort) {

@@ -82,7 +82,6 @@ public class EntityOrdering<E> {
      *
      * @param expression The expression to name
      * @return The corresponding property path
-     *
      * @throws IllegalArgumentException if the expression is not a plain attribute path, a computed ordering such
      *                                  as {@code lower(name)} being unusable as a cursor key since its value
      *                                  cannot be read back from the returned entity
@@ -158,7 +157,6 @@ public class EntityOrdering<E> {
      * @param root            The root entity of the query
      * @param criterion       The requested criterion
      * @return The corresponding ordering
-     *
      * @throws IllegalArgumentException if the criterion refers to an unknown property or to a collection
      */
     public Order toOrder(CriteriaBuilder criteriaBuilder, Root<E> root, SortCriterion criterion) {
@@ -182,7 +180,6 @@ public class EntityOrdering<E> {
      *
      * @param property The property to resolve
      * @return The path of the corresponding attribute
-     *
      * @throws IllegalArgumentException if the property is neither searchable nor an already resolved path
      */
     public String resolveProperty(String property) {
@@ -209,7 +206,6 @@ public class EntityOrdering<E> {
      * @param root     The root entity of the query
      * @param property The property to resolve
      * @return The corresponding path
-     *
      * @throws IllegalArgumentException if the property is unknown or refers to a collection
      */
     public Path<?> resolvePath(Root<E> root, String property) {
@@ -238,7 +234,6 @@ public class EntityOrdering<E> {
      *
      * @param sort The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The complete ordering, made of path based criteria only
-     *
      * @throws IllegalArgumentException if a criterion refers to an unknown property, to a collection, or if the
      *                                  default ordering of the repository is not expressed with plain paths
      */
