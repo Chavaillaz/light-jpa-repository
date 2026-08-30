@@ -67,7 +67,7 @@ class RsqlQueriesTest extends HibernateTest {
             return action.apply(new RsqlQueries<>(entityManager, CoffeeEntity.class, PARSER,
                     () -> defaultQueryVisitor(CoffeeEntity.class),
                     () -> defaultCountVisitor(CoffeeEntity.class),
-                    ordering, CursorCodec.DEFAULT));
+                    ordering, CursorCodec.DEFAULT, CursorKeyCodec.DEFAULT));
         });
     }
 
@@ -109,7 +109,8 @@ class RsqlQueriesTest extends HibernateTest {
                     () -> defaultQueryVisitor(CoffeeEntity.class),
                     () -> defaultCountVisitor(CoffeeEntity.class),
                     new EntityOrdering<>(entityManager, CoffeeEntity.class, BY_NAME, Map::of),
-                    CursorCodec.DEFAULT
+                    CursorCodec.DEFAULT,
+                    CursorKeyCodec.DEFAULT
             );
             CriteriaBuilder builder = entityManager.getCriteriaBuilder();
 

@@ -63,10 +63,12 @@ public final class Keysets {
      * @param root            The root entity of the query
      * @param sort            The resolved ordering, already reversed when walking backwards
      * @param values          The textual keys of the boundary row, in the ordering order
+     * @param codec           The codec parsing the textual keys back into the Java type of their attribute
      * @return The corresponding predicate
-     * @throws IllegalArgumentException if the keys do not match the ordering
+     * @throws IllegalArgumentException if the keys do not match the ordering, or if a key type is not supported
+     *                                  by the given codec
      */
-    public static Predicate seek(CriteriaBuilder criteriaBuilder, From<?, ?> root, Sort sort, List<String> values) {
+    public static Predicate seek(CriteriaBuilder criteriaBuilder, From<?, ?> root, Sort sort, List<String> values, CursorKeyCodec codec) {
         List<SortCriterion> criteria = sort.criteria();
         if (criteria.size() != values.size()) {
             throw new IllegalArgumentException("The cursor does not match the requested ordering");
@@ -76,9 +78,9 @@ public final class Keysets {
         for (int index = 0; index < criteria.size(); index++) {
             List<Predicate> conjunction = new ArrayList<>();
             for (int previous = 0; previous < index; previous++) {
-                conjunction.add(equal(criteriaBuilder, root, criteria.get(previous), values.get(previous)));
+                conjunction.add(equal(criteriaBuilder, root, criteria.get(previous), values.get(previous), codec));
             }
-            conjunction.add(after(criteriaBuilder, root, criteria.get(index), values.get(index)));
+            conjunction.add(after(criteriaBuilder, root, criteria.get(index), values.get(index), codec));
             disjunction.add(criteriaBuilder.and(conjunction.toArray(Predicate[]::new)));
         }
         return criteriaBuilder.or(disjunction.toArray(Predicate[]::new));
@@ -89,15 +91,16 @@ public final class Keysets {
      *
      * @param entity The entity of the boundary row of the page
      * @param sort   The resolved ordering
+     * @param codec  The codec formatting each key into its textual representation
      * @return The textual keys, in the ordering order
      * @throws IllegalArgumentException if one of the keys is {@code null} or cannot be read on the entity, a
      *                                  nullable attribute being unusable as a cursor key since the databases do
      *                                  not agree on where the nulls sort
      * @throws IllegalStateException    if the accessor of a cursor key cannot be invoked
      */
-    public static List<String> valuesOf(Object entity, Sort sort) {
+    public static List<String> valuesOf(Object entity, Sort sort, CursorKeyCodec codec) {
         return sort.criteria().stream()
-                .map(criterion -> CursorValues.format(criterion.property(), read(entity, criterion.property())))
+                .map(criterion -> codec.format(criterion.property(), read(entity, criterion.property())))
                 .toList();
     }
 
@@ -125,10 +128,10 @@ public final class Keysets {
         return parent.get(attributes[attributes.length - 1]);
     }
 
-    private static Predicate equal(CriteriaBuilder builder, From<?, ?> root, SortCriterion criterion, String value) {
+    private static Predicate equal(CriteriaBuilder builder, From<?, ?> root, SortCriterion criterion, String value, CursorKeyCodec codec) {
         Path<?> path = path(root, criterion.property());
         // equal accepts a plain Object, so no comparability is required here
-        return builder.equal(path, CursorValues.parse(value, path.getJavaType()));
+        return builder.equal(path, codec.parse(value, path.getJavaType()));
     }
 
     /**
@@ -146,12 +149,13 @@ public final class Keysets {
      * @param root      The root entity of the query
      * @param criterion The ordering criterion the key belongs to
      * @param value     The textual key of the boundary row
+     * @param codec     The codec parsing the textual key back into the Java type of its attribute
      * @return The corresponding predicate
-     * @throws IllegalArgumentException if the type of the attribute is not a supported cursor key type
+     * @throws IllegalArgumentException if the type of the attribute is not supported by the given codec
      */
-    private static <Y extends Comparable<? super Y>> Predicate after(CriteriaBuilder builder, From<?, ?> root, SortCriterion criterion, String value) {
+    private static <Y extends Comparable<? super Y>> Predicate after(CriteriaBuilder builder, From<?, ?> root, SortCriterion criterion, String value, CursorKeyCodec codec) {
         Path<Y> path = path(root, criterion.property());
-        Y bound = CursorValues.parse(value, path.getJavaType());
+        Y bound = codec.parse(value, path.getJavaType());
         return criterion.ascending() ? builder.greaterThan(path, bound) : builder.lessThan(path, bound);
     }
 

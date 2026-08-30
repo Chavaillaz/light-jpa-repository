@@ -95,7 +95,7 @@ class CursorsTest {
         @Test
         @DisplayName("drops the extra row and reports the following page")
         void dropsTheExtraRow() {
-            CursorResult<Bean> result = Cursors.toResult(CODEC, BEANS, Cursor.first(3, SORT), SORT, null);
+            CursorResult<Bean> result = Cursors.toResult(CODEC, BEANS, Cursor.first(3, SORT), SORT, null, CursorKeyCodec.DEFAULT);
 
             assertThat(result.items()).extracting(Bean::name).containsExactly("Arabica", "Liberica", "Robusta");
             assertThat(result.size()).isEqualTo(3);
@@ -108,7 +108,7 @@ class CursorsTest {
         @Test
         @DisplayName("reports no following page when no extra row was fetched")
         void reportsNoFollowingPage() {
-            CursorResult<Bean> result = Cursors.toResult(CODEC, BEANS.subList(0, 2), Cursor.first(3, SORT), SORT, null);
+            CursorResult<Bean> result = Cursors.toResult(CODEC, BEANS.subList(0, 2), Cursor.first(3, SORT), SORT, null, CursorKeyCodec.DEFAULT);
 
             assertThat(result.items()).hasSize(2);
             assertThat(result.hasNext()).isFalse();
@@ -118,7 +118,7 @@ class CursorsTest {
         @Test
         @DisplayName("reports no following page when exactly the requested size was fetched, no extra row beyond it")
         void reportsNoFollowingPageOnAnExactBoundary() {
-            CursorResult<Bean> result = Cursors.toResult(CODEC, BEANS.subList(0, 3), Cursor.first(3, SORT), SORT, null);
+            CursorResult<Bean> result = Cursors.toResult(CODEC, BEANS.subList(0, 3), Cursor.first(3, SORT), SORT, null, CursorKeyCodec.DEFAULT);
 
             assertThat(result.items()).hasSize(3);
             assertThat(result.hasNext()).isFalse();
@@ -129,7 +129,7 @@ class CursorsTest {
         @DisplayName("reports a preceding page as soon as a position was requested")
         void reportsAPrecedingPage() {
             CursorResult<Bean> result = Cursors.toResult(
-                    CODEC, BEANS.subList(0, 2), Cursor.first(3, SORT), SORT, position(List.of("Arabica"), false));
+                    CODEC, BEANS.subList(0, 2), Cursor.first(3, SORT), SORT, position(List.of("Arabica"), false), CursorKeyCodec.DEFAULT);
 
             assertThat(result.hasPrevious()).isTrue();
             assertThat(result.previous()).isNotBlank();
@@ -139,7 +139,7 @@ class CursorsTest {
         @DisplayName("puts a backward page back in the natural ordering")
         void reversesABackwardPage() {
             CursorResult<Bean> result =
-                    Cursors.toResult(CODEC, BEANS, Cursor.first(3, SORT), SORT, position(List.of("Zambia"), true));
+                    Cursors.toResult(CODEC, BEANS, Cursor.first(3, SORT), SORT, position(List.of("Zambia"), true), CursorKeyCodec.DEFAULT);
 
             assertThat(result.items()).extracting(Bean::name).containsExactly("Robusta", "Liberica", "Arabica");
             assertThat(result.hasNext()).as("we come from the following page").isTrue();
@@ -150,7 +150,7 @@ class CursorsTest {
         @DisplayName("reports no preceding page when the backward walk reaches the beginning")
         void reachesTheBeginning() {
             CursorResult<Bean> result = Cursors.toResult(
-                    CODEC, BEANS.subList(0, 2), Cursor.first(3, SORT), SORT, position(List.of("Zambia"), true));
+                    CODEC, BEANS.subList(0, 2), Cursor.first(3, SORT), SORT, position(List.of("Zambia"), true), CursorKeyCodec.DEFAULT);
 
             assertThat(result.hasPrevious()).isFalse();
             assertThat(result.hasNext()).isTrue();
@@ -159,7 +159,7 @@ class CursorsTest {
         @Test
         @DisplayName("returns an empty result, with no token, when nothing was fetched")
         void returnsAnEmptyResult() {
-            CursorResult<Bean> result = Cursors.toResult(CODEC, List.of(), Cursor.first(3, SORT), SORT, null);
+            CursorResult<Bean> result = Cursors.toResult(CODEC, List.of(), Cursor.first(3, SORT), SORT, null, CursorKeyCodec.DEFAULT);
 
             assertThat(result).isEqualTo(CursorResult.empty(3));
         }
@@ -168,7 +168,7 @@ class CursorsTest {
         @DisplayName("issues tokens bound to the ordering, on the boundary rows")
         void issuesBoundTokens() {
             CursorResult<Bean> result =
-                    Cursors.toResult(CODEC, BEANS, Cursor.first(3, SORT), SORT, position(List.of("A"), false));
+                    Cursors.toResult(CODEC, BEANS, Cursor.first(3, SORT), SORT, position(List.of("A"), false), CursorKeyCodec.DEFAULT);
 
             assertThat(CODEC.decode(result.next())).isEqualTo(position(List.of("Robusta"), false));
             assertThat(CODEC.decode(result.previous())).isEqualTo(position(List.of("Arabica"), true));

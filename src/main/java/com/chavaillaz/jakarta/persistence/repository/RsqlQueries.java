@@ -70,15 +70,21 @@ public class RsqlQueries<E> {
     protected final CursorCodec cursorCodec;
 
     /**
+     * The codec of the cursor key values.
+     */
+    protected final CursorKeyCodec cursorKeyCodec;
+
+    /**
      * Creates the RSQL support of a repository.
      *
-     * @param entityManager The entity manager to use
-     * @param entityType    The type of the managed entity
-     * @param rsqlParser    The parser used to build the RSQL query nodes
-     * @param queryVisitor  The provider of the visitor building the search queries
-     * @param countVisitor  The provider of the visitor building the count queries
-     * @param ordering      The ordering rules of the repository
-     * @param cursorCodec   The codec of the cursor tokens
+     * @param entityManager  The entity manager to use
+     * @param entityType     The type of the managed entity
+     * @param rsqlParser     The parser used to build the RSQL query nodes
+     * @param queryVisitor   The provider of the visitor building the search queries
+     * @param countVisitor   The provider of the visitor building the count queries
+     * @param ordering       The ordering rules of the repository
+     * @param cursorCodec    The codec of the cursor tokens
+     * @param cursorKeyCodec The codec of the cursor key values
      */
     public RsqlQueries(
             EntityManager entityManager,
@@ -87,7 +93,8 @@ public class RsqlQueries<E> {
             Supplier<JpaCriteriaQueryVisitor<E>> queryVisitor,
             Supplier<JpaCriteriaCountQueryVisitor<E>> countVisitor,
             EntityOrdering<E> ordering,
-            CursorCodec cursorCodec) {
+            CursorCodec cursorCodec,
+            CursorKeyCodec cursorKeyCodec) {
         this.entityManager = entityManager;
         this.entityType = entityType;
         this.rsqlParser = rsqlParser;
@@ -95,6 +102,7 @@ public class RsqlQueries<E> {
         this.countVisitor = countVisitor;
         this.ordering = ordering;
         this.cursorCodec = cursorCodec;
+        this.cursorKeyCodec = cursorKeyCodec;
     }
 
     /**
@@ -230,7 +238,7 @@ public class RsqlQueries<E> {
         CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
         getRoot(query).ifPresent(root -> {
             if (position != null) {
-                EntityQueries.restrict(criteriaBuilder, query, Keysets.seek(criteriaBuilder, root, direction, position.values()));
+                EntityQueries.restrict(criteriaBuilder, query, Keysets.seek(criteriaBuilder, root, direction, position.values(), cursorKeyCodec));
             }
             query.orderBy(Keysets.toOrders(criteriaBuilder, root, direction));
         });
@@ -239,7 +247,7 @@ public class RsqlQueries<E> {
                 .setMaxResults(cursor.limit())
                 .getResultList();
 
-        return Cursors.toResult(cursorCodec, fetched, cursor, resolvedSort, position);
+        return Cursors.toResult(cursorCodec, fetched, cursor, resolvedSort, position, cursorKeyCodec);
     }
 
     /**

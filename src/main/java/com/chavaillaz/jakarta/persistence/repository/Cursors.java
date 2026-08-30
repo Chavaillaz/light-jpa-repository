@@ -75,9 +75,10 @@ public final class Cursors {
      * @param cursor       The requested position, size and ordering
      * @param resolvedSort The resolved ordering the tokens are issued for
      * @param position     The requested position, or {@code null} for the first page
+     * @param keyCodec     The codec formatting the ordering keys of the boundary rows into the tokens
      * @return The corresponding page, with the tokens of the surrounding ones
      */
-    public static <T> CursorResult<T> toResult(CursorCodec codec, List<T> fetched, Cursor cursor, Sort resolvedSort, @Nullable CursorPosition position) {
+    public static <T> CursorResult<T> toResult(CursorCodec codec, List<T> fetched, Cursor cursor, Sort resolvedSort, @Nullable CursorPosition position, CursorKeyCodec keyCodec) {
         boolean backward = isBackward(position);
         boolean hasMore = fetched.size() > cursor.size();
 
@@ -97,8 +98,8 @@ public final class Cursors {
         return new CursorResult<>(
                 items,
                 cursor.size(),
-                hasNext ? token(codec, items.getLast(), resolvedSort, false, fingerprint) : null,
-                hasPrevious ? token(codec, items.getFirst(), resolvedSort, true, fingerprint) : null,
+                hasNext ? token(codec, items.getLast(), resolvedSort, false, fingerprint, keyCodec) : null,
+                hasPrevious ? token(codec, items.getFirst(), resolvedSort, true, fingerprint, keyCodec) : null,
                 hasNext,
                 hasPrevious);
     }
@@ -113,8 +114,8 @@ public final class Cursors {
         return Integer.toHexString(sort.toString().hashCode());
     }
 
-    private static <T> String token(CursorCodec codec, T entity, Sort sort, boolean backward, String fingerprint) {
-        return codec.encode(new CursorPosition(Keysets.valuesOf(entity, sort), backward, fingerprint));
+    private static <T> String token(CursorCodec codec, T entity, Sort sort, boolean backward, String fingerprint, CursorKeyCodec keyCodec) {
+        return codec.encode(new CursorPosition(Keysets.valuesOf(entity, sort, keyCodec), backward, fingerprint));
     }
 
 }

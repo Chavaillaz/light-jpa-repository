@@ -54,7 +54,7 @@ class EntityQueriesTest extends HibernateTest {
     private <T> T withQueries(Function<EntityQueries<CoffeeEntity>, T> action) {
         return inTransaction(entityManager -> {
             EntityOrdering<CoffeeEntity> ordering = new EntityOrdering<>(entityManager, CoffeeEntity.class, BY_NAME, Map::of);
-            return action.apply(new EntityQueries<>(entityManager, CoffeeEntity.class, ordering, CursorCodec.DEFAULT));
+            return action.apply(new EntityQueries<>(entityManager, CoffeeEntity.class, ordering, CursorCodec.DEFAULT, CursorKeyCodec.DEFAULT));
         });
     }
 

@@ -120,7 +120,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      */
     protected EntityQueries<E> queries() {
         if (queries == null) {
-            queries = new EntityQueries<>(entityManager, entityType, ordering(), cursorCodec());
+            queries = new EntityQueries<>(entityManager, entityType, ordering(), cursorCodec(), cursorKeyCodec());
         }
         return queries;
     }
@@ -133,7 +133,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     protected RsqlQueries<E> rsqlQueries() {
         if (rsqlQueries == null) {
             // The hooks are passed as method references, so that the overriding subclasses stay in charge of them.
-            rsqlQueries = new RsqlQueries<>(entityManager, entityType, rsqlParser, this::createQueryVisitor, this::createCountVisitor, ordering(), cursorCodec());
+            rsqlQueries = new RsqlQueries<>(entityManager, entityType, rsqlParser, this::createQueryVisitor, this::createCountVisitor, ordering(), cursorCodec(), cursorKeyCodec());
         }
         return rsqlQueries;
     }
@@ -510,6 +510,19 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      */
     protected CursorCodec cursorCodec() {
         return CursorCodec.DEFAULT;
+    }
+
+    /**
+     * Gets the codec of the cursor key values, the default one by default.
+     * <p>
+     * Override to support an attribute type {@link CursorValues} does not, such as a legacy {@code java.sql.Date}
+     * mapping or a custom identifier type, typically by delegating to {@link CursorKeyCodec#DEFAULT} for every
+     * other type.
+     *
+     * @return The codec of the cursor key values
+     */
+    protected CursorKeyCodec cursorKeyCodec() {
+        return CursorKeyCodec.DEFAULT;
     }
 
     /**

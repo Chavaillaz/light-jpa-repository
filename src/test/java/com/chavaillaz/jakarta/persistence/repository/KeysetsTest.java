@@ -100,7 +100,7 @@ class KeysetsTest extends HibernateTest {
         CoffeeEntity coffee = coffee(GEISHA, "Panama", Roast.LIGHT, "80.00", 3);
         coffee.setRoaster(roaster("Moka Brothers", "France"));
 
-        assertThat(Keysets.valuesOf(coffee, Sort.parse("name,price,strength,roast,roaster.country")))
+        assertThat(Keysets.valuesOf(coffee, Sort.parse("name,price,strength,roast,roaster.country"), CursorKeyCodec.DEFAULT))
                 .containsExactly(GEISHA, "80.00", "3", "LIGHT", "France");
     }
 
@@ -110,7 +110,7 @@ class KeysetsTest extends HibernateTest {
         CoffeeEntity coffee = coffee(GEISHA);
 
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> Keysets.valuesOf(coffee, Sort.parse("decafLabel")))
+                .isThrownBy(() -> Keysets.valuesOf(coffee, Sort.parse("decafLabel"), CursorKeyCodec.DEFAULT))
                 .withMessageContaining("Cannot build a cursor on the null property decafLabel");
     }
 
@@ -118,7 +118,7 @@ class KeysetsTest extends HibernateTest {
     @DisplayName("reads a key through a nested null owner as null, and therefore rejects it")
     void rejectsANullOwner() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> Keysets.valuesOf(coffee(GEISHA), Sort.parse("roaster.name")))
+                .isThrownBy(() -> Keysets.valuesOf(coffee(GEISHA), Sort.parse("roaster.name"), CursorKeyCodec.DEFAULT))
                 .withMessageContaining("roaster.name");
     }
 
@@ -126,7 +126,7 @@ class KeysetsTest extends HibernateTest {
     @DisplayName("rejects a key that cannot be read on the entity")
     void rejectsAnUnreadableKey() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> Keysets.valuesOf(coffee(GEISHA), Sort.parse("caffeine")))
+                .isThrownBy(() -> Keysets.valuesOf(coffee(GEISHA), Sort.parse("caffeine"), CursorKeyCodec.DEFAULT))
                 .withMessageContaining("Cannot read the cursor key caffeine");
     }
 
@@ -134,7 +134,7 @@ class KeysetsTest extends HibernateTest {
     @DisplayName("rejects a position that does not match the ordering")
     void rejectsAMismatchingPosition() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> Keysets.seek(builder, root, Sort.parse("name,id"), List.of("Kona")))
+                .isThrownBy(() -> Keysets.seek(builder, root, Sort.parse("name,id"), List.of("Kona"), CursorKeyCodec.DEFAULT))
                 .withMessage("The cursor does not match the requested ordering");
     }
 
@@ -144,7 +144,7 @@ class KeysetsTest extends HibernateTest {
         Map<String, CoffeeEntity> menu = inTransaction(Coffees::persistMenu);
 
         Predicate seek = Keysets.seek(builder, root, Sort.parse("roast,-strength,id"),
-                List.of("MEDIUM", "6", String.valueOf(menu.get(KONA).getId())));
+                List.of("MEDIUM", "6", String.valueOf(menu.get(KONA).getId())), CursorKeyCodec.DEFAULT);
         query.where(seek).orderBy(Keysets.toOrders(builder, root, Sort.parse("roast,-strength,id")));
 
         List<CoffeeEntity> found = entityManager.createQuery(query).getResultList();
@@ -159,7 +159,7 @@ class KeysetsTest extends HibernateTest {
     void seeksOnAnEnum() {
         runInTransaction(Coffees::persistMenu);
 
-        query.where(Keysets.seek(builder, root, Sort.parse("roast,name"), List.of("DARK", HARRAR)))
+        query.where(Keysets.seek(builder, root, Sort.parse("roast,name"), List.of("DARK", HARRAR), CursorKeyCodec.DEFAULT))
                 .orderBy(Keysets.toOrders(builder, root, Sort.parse("roast,name")));
 
         assertThat(namesOf(entityManager.createQuery(query).getResultList()))

@@ -23,7 +23,10 @@
  * to build the seek predicate and the {@code ORDER BY} clause from a resolved ordering, and on
  * {@link com.chavaillaz.jakarta.persistence.repository.CursorCodec} to turn the boundary keys into the opaque
  * token exposed to the API consumers, {@link com.chavaillaz.jakarta.persistence.repository.Base64CursorCodec}
- * being the default, overridable implementation.
+ * being the default, overridable implementation. The formatting and parsing of a single key of that position, at
+ * the attribute type level, is delegated to {@link com.chavaillaz.jakarta.persistence.repository.CursorKeyCodec},
+ * an independent extension point defaulting to {@link com.chavaillaz.jakarta.persistence.repository.CursorValues},
+ * which covers the attribute types supported out of the box.
  * <p>
  * The package is {@link org.jspecify.annotations.NullMarked}: every type is non-null unless explicitly annotated
  * {@link org.jspecify.annotations.Nullable}.

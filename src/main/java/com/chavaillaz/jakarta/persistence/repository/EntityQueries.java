@@ -49,18 +49,25 @@ public class EntityQueries<E> {
     protected final CursorCodec cursorCodec;
 
     /**
+     * The codec of the cursor key values.
+     */
+    protected final CursorKeyCodec cursorKeyCodec;
+
+    /**
      * Creates the queries of a repository.
      *
-     * @param entityManager The entity manager to use
-     * @param entityType    The type of the managed entity
-     * @param ordering      The ordering rules of the repository
-     * @param cursorCodec   The codec of the cursor tokens
+     * @param entityManager  The entity manager to use
+     * @param entityType     The type of the managed entity
+     * @param ordering       The ordering rules of the repository
+     * @param cursorCodec    The codec of the cursor tokens
+     * @param cursorKeyCodec The codec of the cursor key values
      */
-    public EntityQueries(EntityManager entityManager, Class<E> entityType, EntityOrdering<E> ordering, CursorCodec cursorCodec) {
+    public EntityQueries(EntityManager entityManager, Class<E> entityType, EntityOrdering<E> ordering, CursorCodec cursorCodec, CursorKeyCodec cursorKeyCodec) {
         this.entityManager = entityManager;
         this.entityType = entityType;
         this.ordering = ordering;
         this.cursorCodec = cursorCodec;
+        this.cursorKeyCodec = cursorKeyCodec;
     }
 
     /**
@@ -219,7 +226,7 @@ public class EntityQueries<E> {
                         restrict(criteriaBuilder, query, criteria.toPredicate(criteriaBuilder, query, root));
                     }
                     if (position != null) {
-                        restrict(criteriaBuilder, query, Keysets.seek(criteriaBuilder, root, direction, position.values()));
+                        restrict(criteriaBuilder, query, Keysets.seek(criteriaBuilder, root, direction, position.values(), cursorKeyCodec));
                     }
                     if (hasCollectionJoin(root)) {
                         query.distinct(true);
@@ -230,7 +237,7 @@ public class EntityQueries<E> {
                 .setMaxResults(cursor.limit())
                 .getResultList();
 
-        return Cursors.toResult(cursorCodec, fetched, cursor, resolvedSort, position);
+        return Cursors.toResult(cursorCodec, fetched, cursor, resolvedSort, position, cursorKeyCodec);
     }
 
 }
