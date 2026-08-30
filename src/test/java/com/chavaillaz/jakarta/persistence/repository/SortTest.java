@@ -18,7 +18,7 @@ class SortTest {
 
     @ParameterizedTest
     @NullAndEmptySource
-    @ValueSource(strings = { "   ", "\t" })
+    @ValueSource(strings = {"   ", "\t"})
     @DisplayName("parses a blank ordering as none")
     void parsesABlankOrdering(String value) {
         assertThat(Sort.parse(value)).isEqualTo(Sort.NONE);

@@ -2,6 +2,7 @@ package com.chavaillaz.jakarta.persistence.repository.example;
 
 import static java.util.stream.Collectors.toMap;
 
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Collection;
@@ -10,7 +11,6 @@ import java.util.Map;
 
 import com.chavaillaz.jakarta.persistence.repository.CursorResult;
 import com.chavaillaz.jakarta.persistence.repository.PaginationResult;
-import jakarta.persistence.EntityManager;
 
 /**
  * Coffee fixtures, deliberately deterministic: the menu is always the very same seven coffees, so that the

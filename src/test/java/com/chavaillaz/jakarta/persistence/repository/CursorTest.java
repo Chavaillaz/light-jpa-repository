@@ -44,7 +44,7 @@ class CursorTest {
 
     @ParameterizedTest
     @NullAndEmptySource
-    @ValueSource(strings = { "   ", "\t" })
+    @ValueSource(strings = {"   ", "\t"})
     @DisplayName("requests the first page when no token is given")
     void requestsTheFirstPage(String token) {
         assertThat(Cursor.of(token, 10, Sort.NONE).isFirst()).isTrue();

@@ -1,19 +1,22 @@
 package com.chavaillaz.jakarta.persistence.repository.example;
 
-import java.util.List;
-
-import com.chavaillaz.jakarta.persistence.repository.Base64CursorCodec;
-import com.chavaillaz.jakarta.persistence.repository.CursorCodec;
-import com.chavaillaz.jakarta.persistence.repository.CursorPosition;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Root;
+import java.util.List;
+
+import org.jspecify.annotations.NullMarked;
+
+import com.chavaillaz.jakarta.persistence.repository.Base64CursorCodec;
+import com.chavaillaz.jakarta.persistence.repository.CursorCodec;
+import com.chavaillaz.jakarta.persistence.repository.CursorPosition;
 
 /**
  * A repository whose default ordering is computed, and whose cursor codec is overridden: the computed ordering
  * must be rejected as a cursor key, the custom codec must be the one issuing the tokens.
  */
+@NullMarked
 public class RoastedCoffeeRepositoryJpa extends CoffeeRepositoryJpa {
 
     public static final String PREFIX = "brew-";

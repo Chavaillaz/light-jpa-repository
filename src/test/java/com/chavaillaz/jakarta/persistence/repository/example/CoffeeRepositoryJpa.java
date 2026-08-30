@@ -3,9 +3,16 @@ package com.chavaillaz.jakarta.persistence.repository.example;
 import static org.hibernate.query.restriction.Restriction.equal;
 import static org.hibernate.query.restriction.Restriction.greaterThan;
 
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.Order;
+import jakarta.persistence.criteria.Root;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import org.jspecify.annotations.NullMarked;
 
 import com.chavaillaz.jakarta.persistence.repository.AbstractRepository;
 import com.chavaillaz.jakarta.persistence.repository.Criteria;
@@ -15,16 +22,12 @@ import com.chavaillaz.jakarta.persistence.repository.Pageable;
 import com.chavaillaz.jakarta.persistence.repository.PaginationResult;
 import com.chavaillaz.jakarta.persistence.repository.Sort;
 import com.chavaillaz.jakarta.persistence.repository.SortCriterion;
-import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.Order;
-import jakarta.persistence.criteria.Root;
 
 /**
  * Repository of the coffees, exercising every hook of the {@link AbstractRepository}: the searchable properties,
  * the default ordering, the restrictions, the criteria and the cursor.
  */
+@NullMarked
 public class CoffeeRepositoryJpa extends AbstractRepository<CoffeeEntity, Long> implements CoffeeRepository {
 
     /**

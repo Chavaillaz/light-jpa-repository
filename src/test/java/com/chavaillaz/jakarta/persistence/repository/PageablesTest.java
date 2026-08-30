@@ -6,22 +6,23 @@ import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.SIDA
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.namesOf;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.TypedQuery;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.LongSupplier;
 
-import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity;
-import com.chavaillaz.jakarta.persistence.repository.example.Coffees;
-import com.chavaillaz.jakarta.persistence.repository.example.RoasterEntity;
-import com.chavaillaz.jakarta.persistence.repository.example.TastingNoteEntity;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.TypedQuery;
 import org.hibernate.query.Page;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity;
+import com.chavaillaz.jakarta.persistence.repository.example.Coffees;
+import com.chavaillaz.jakarta.persistence.repository.example.RoasterEntity;
+import com.chavaillaz.jakarta.persistence.repository.example.TastingNoteEntity;
 
 @DisplayName("Pageables")
 class PageablesTest extends HibernateTest {

@@ -18,6 +18,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
 import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity;
 import com.chavaillaz.jakarta.persistence.repository.example.CoffeeRepositoryJpa;
 import com.chavaillaz.jakarta.persistence.repository.example.Coffees;
@@ -25,10 +30,6 @@ import com.chavaillaz.jakarta.persistence.repository.example.Roast;
 import com.chavaillaz.jakarta.persistence.repository.example.RoastedCoffeeRepositoryJpa;
 import com.chavaillaz.jakarta.persistence.repository.example.RoasterEntity;
 import com.chavaillaz.jakarta.persistence.repository.example.TastingNoteEntity;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
 
 @DisplayName("Scrolling through the coffee menu")
 class CoffeeCursorTest extends HibernateTest {

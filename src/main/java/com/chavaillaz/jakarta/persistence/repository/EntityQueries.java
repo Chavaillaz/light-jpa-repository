@@ -3,13 +3,12 @@ package com.chavaillaz.jakarta.persistence.repository;
 import static com.chavaillaz.jakarta.persistence.repository.Pageables.toPage;
 import static org.hibernate.query.restriction.Restriction.unrestricted;
 
-import java.util.List;
-import java.util.Optional;
-
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Predicate;
+import java.util.List;
+import java.util.Optional;
 
 import org.hibernate.query.SelectionQuery;
 import org.hibernate.query.restriction.Restriction;

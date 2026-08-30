@@ -2,16 +2,15 @@ package com.chavaillaz.jakarta.persistence.repository;
 
 import static org.slf4j.LoggerFactory.getLogger;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityTransaction;
+import jakarta.persistence.metamodel.EntityType;
 import java.lang.reflect.Constructor;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
-import com.chavaillaz.jakarta.persistence.Identifiable;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.EntityTransaction;
-import jakarta.persistence.metamodel.EntityType;
 import lombok.SneakyThrows;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
@@ -24,6 +23,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.slf4j.Logger;
+
+import com.chavaillaz.jakarta.persistence.Identifiable;
 
 /**
  * Base class of the tests running against a real Hibernate session factory, backed by an in memory database.

@@ -15,8 +15,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.function.Function;
+
+import cz.jirutka.rsql.parser.ast.Node;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity;
 import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity_;
@@ -26,16 +37,6 @@ import com.chavaillaz.jakarta.persistence.repository.example.Roast;
 import com.chavaillaz.jakarta.persistence.repository.example.RoasterEntity;
 import com.chavaillaz.jakarta.persistence.repository.example.RoasterEntity_;
 import com.chavaillaz.jakarta.persistence.repository.example.TastingNoteEntity;
-import cz.jirutka.rsql.parser.ast.Node;
-import jakarta.persistence.EntityManager;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 @DisplayName("Searching the coffee menu")
 class CoffeeSearchTest extends HibernateTest {
@@ -109,7 +110,7 @@ class CoffeeSearchTest extends HibernateTest {
         }
 
         @ParameterizedTest(name = "page {0} of size {1} is not paginated")
-        @CsvSource(nullValues = "null", value = { "null,3", "0,null", "-1,3", "0,0", "1,-5" })
+        @CsvSource(nullValues = "null", value = {"null,3", "0,null", "-1,3", "0,0", "1,-5"})
         @DisplayName("returns everything when the page coordinates are incomplete or invalid")
         void ignoresInvalidCoordinates(Integer page, Integer size) {
             PaginationResult<CoffeeEntity> result =
@@ -201,7 +202,7 @@ class CoffeeSearchTest extends HibernateTest {
         }
 
         @ParameterizedTest(name = "sorting on \"{0}\" is rejected")
-        @ValueSource(strings = { "unknown", "roastedAt" })
+        @ValueSource(strings = {"unknown", "roastedAt"})
         @DisplayName("rejects a property that is not searchable")
         void rejectsUnknownProperty(String property) {
             assertThatIllegalArgumentException()

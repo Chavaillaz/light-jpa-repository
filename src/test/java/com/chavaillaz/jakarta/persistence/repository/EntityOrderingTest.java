@@ -4,25 +4,26 @@ import static java.util.Collections.emptyMap;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
-import java.util.List;
-import java.util.Map;
-import java.util.function.BiFunction;
-
-import com.chavaillaz.jakarta.persistence.repository.example.BeanBatchEntity;
-import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity;
-import com.chavaillaz.jakarta.persistence.repository.example.RoasterEntity;
-import com.chavaillaz.jakarta.persistence.repository.example.TastingNoteEntity;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Root;
+import java.util.List;
+import java.util.Map;
+import java.util.function.BiFunction;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+
+import com.chavaillaz.jakarta.persistence.repository.example.BeanBatchEntity;
+import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity;
+import com.chavaillaz.jakarta.persistence.repository.example.RoasterEntity;
+import com.chavaillaz.jakarta.persistence.repository.example.TastingNoteEntity;
 
 @DisplayName("EntityOrdering")
 class EntityOrderingTest extends HibernateTest {
@@ -51,7 +52,7 @@ class EntityOrderingTest extends HibernateTest {
     }
 
     private EntityOrdering<CoffeeEntity> ordering(Map<String, String> properties,
-            BiFunction<CriteriaBuilder, Root<CoffeeEntity>, List<Order>> defaults) {
+                                                  BiFunction<CriteriaBuilder, Root<CoffeeEntity>, List<Order>> defaults) {
         return new EntityOrdering<>(entityManager, CoffeeEntity.class, defaults, () -> properties);
     }
 

@@ -50,7 +50,7 @@ class Base64CursorCodecTest {
             "=/+",
             "",
             "  ",
-            "Ethiopia\nHarrar" })
+            "Ethiopia\nHarrar"})
     @DisplayName("encodes each key on its own, so that a value cannot break the token")
     void encodesEachKeyOnItsOwn(String value) {
         CursorPosition position = new CursorPosition(List.of(value, "second"), false, "cafe");
@@ -74,7 +74,7 @@ class Base64CursorCodecTest {
     }
 
     @ParameterizedTest(name = "\"{0}\" is rejected")
-    @ValueSource(strings = { "not base 64 !!", "@@@@" })
+    @ValueSource(strings = {"not base 64 !!", "@@@@"})
     @DisplayName("rejects a malformed token")
     void rejectsAMalformedToken(String token) {
         assertThatIllegalArgumentException()

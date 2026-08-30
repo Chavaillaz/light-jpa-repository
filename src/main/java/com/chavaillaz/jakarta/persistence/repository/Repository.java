@@ -9,9 +9,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-import com.chavaillaz.jakarta.persistence.Identifiable;
 import cz.jirutka.rsql.parser.RSQLParserException;
 import org.jspecify.annotations.Nullable;
+
+import com.chavaillaz.jakarta.persistence.Identifiable;
 
 /**
  * Contract of all the repositories, providing the common operations to read, search, persist and delete entities.

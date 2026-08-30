@@ -1,9 +1,9 @@
 package com.chavaillaz.jakarta.persistence.repository;
 
+import jakarta.persistence.TypedQuery;
 import java.util.List;
 import java.util.function.LongSupplier;
 
-import jakarta.persistence.TypedQuery;
 import org.hibernate.query.Page;
 
 /**

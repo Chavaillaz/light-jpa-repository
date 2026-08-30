@@ -1,7 +1,8 @@
 package com.chavaillaz.jakarta.persistence;
 
-import com.chavaillaz.jakarta.persistence.repository.AbstractRepository;
 import org.jspecify.annotations.Nullable;
+
+import com.chavaillaz.jakarta.persistence.repository.AbstractRepository;
 
 /**
  * Interface to identify an entity.

@@ -1,7 +1,8 @@
 package com.chavaillaz.jakarta.persistence.repository.example;
 
-import com.chavaillaz.jakarta.persistence.repository.AbstractRepository;
 import jakarta.persistence.EntityManager;
+
+import com.chavaillaz.jakarta.persistence.repository.AbstractRepository;
 
 /**
  * No searchable properties and no default ordering: every attribute is reachable, only the id orders.

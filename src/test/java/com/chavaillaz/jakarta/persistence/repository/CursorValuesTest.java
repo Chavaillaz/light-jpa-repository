@@ -16,18 +16,19 @@ import java.time.ZonedDateTime;
 import java.util.Date;
 import java.util.UUID;
 
-import com.chavaillaz.jakarta.persistence.repository.example.Roast;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import com.chavaillaz.jakarta.persistence.repository.example.Roast;
+
 @DisplayName("CursorValues")
 class CursorValuesTest {
 
     static Arguments[] keys() {
-        return new Arguments[] {
+        return new Arguments[]{
                 Arguments.of(String.class, "Yirgacheffe"),
                 Arguments.of(Boolean.class, true),
                 Arguments.of(Character.class, 'C'),

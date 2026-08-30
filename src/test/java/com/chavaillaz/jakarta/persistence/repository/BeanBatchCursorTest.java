@@ -5,13 +5,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.LocalDate;
 import java.util.List;
 
-import com.chavaillaz.jakarta.persistence.repository.example.BeanBatchEntity;
-import com.chavaillaz.jakarta.persistence.repository.example.BeanBatchEntity.BatchId;
-import com.chavaillaz.jakarta.persistence.repository.example.BeanBatchRepositoryJpa;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import com.chavaillaz.jakarta.persistence.repository.example.BeanBatchEntity;
+import com.chavaillaz.jakarta.persistence.repository.example.BeanBatchEntity.BatchId;
+import com.chavaillaz.jakarta.persistence.repository.example.BeanBatchRepositoryJpa;
 
 /**
  * Exercises the cursor pagination end to end against an entity with an {@code @EmbeddedId}, the composite key
@@ -25,6 +26,18 @@ class BeanBatchCursorTest extends HibernateTest {
         setupSessionFactory(BeanBatchEntity.class);
     }
 
+    private static BeanBatchEntity batch(String roasterCode, int batchNumber) {
+        BeanBatchEntity batch = new BeanBatchEntity();
+        batch.setId(new BatchId(roasterCode, batchNumber));
+        batch.setRoastedOn(LocalDate.of(2024, 1, batchNumber));
+        batch.setKilograms(10 * batchNumber);
+        return batch;
+    }
+
+    private static List<BatchId> idsOf(CursorResult<BeanBatchEntity> result) {
+        return result.items().stream().map(BeanBatchEntity::getId).toList();
+    }
+
     @BeforeEach
     void brewTheBatches() {
         runInTransaction(entityManager -> {
@@ -35,20 +48,8 @@ class BeanBatchCursorTest extends HibernateTest {
         });
     }
 
-    private static BeanBatchEntity batch(String roasterCode, int batchNumber) {
-        BeanBatchEntity batch = new BeanBatchEntity();
-        batch.setId(new BatchId(roasterCode, batchNumber));
-        batch.setRoastedOn(LocalDate.of(2024, 1, batchNumber));
-        batch.setKilograms(10 * batchNumber);
-        return batch;
-    }
-
     private CursorResult<BeanBatchEntity> page(String token, int size) {
         return withRepository(BeanBatchRepositoryJpa.class, repository -> repository.findAll(Cursor.of(token, size, Sort.NONE)));
-    }
-
-    private static List<BatchId> idsOf(CursorResult<BeanBatchEntity> result) {
-        return result.items().stream().map(BeanBatchEntity::getId).toList();
     }
 
     @Test

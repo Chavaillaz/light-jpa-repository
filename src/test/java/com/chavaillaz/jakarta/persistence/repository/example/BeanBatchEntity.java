@@ -1,19 +1,21 @@
 package com.chavaillaz.jakarta.persistence.repository.example;
 
-import java.io.Serializable;
-import java.time.LocalDate;
-
-import com.chavaillaz.jakarta.persistence.Identifiable;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import java.io.Serializable;
+import java.time.LocalDate;
+
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.jspecify.annotations.Nullable;
+
+import com.chavaillaz.jakarta.persistence.Identifiable;
 
 @Getter
 @Setter
@@ -22,7 +24,7 @@ import lombok.Setter;
 public class BeanBatchEntity implements Identifiable<BeanBatchEntity.BatchId> {
 
     @EmbeddedId
-    private BatchId id;
+    private @Nullable BatchId id;
 
     private LocalDate roastedOn;
 

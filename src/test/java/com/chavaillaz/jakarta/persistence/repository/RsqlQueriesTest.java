@@ -13,25 +13,26 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Order;
+import jakarta.persistence.criteria.Root;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity;
-import com.chavaillaz.jakarta.persistence.repository.example.Coffees;
-import com.chavaillaz.jakarta.persistence.repository.example.RoasterEntity;
-import com.chavaillaz.jakarta.persistence.repository.example.TastingNoteEntity;
 import cz.jirutka.rsql.parser.RSQLParser;
 import cz.jirutka.rsql.parser.ast.Node;
-import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.CriteriaQuery;
-import jakarta.persistence.criteria.Order;
-import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+
+import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity;
+import com.chavaillaz.jakarta.persistence.repository.example.Coffees;
+import com.chavaillaz.jakarta.persistence.repository.example.RoasterEntity;
+import com.chavaillaz.jakarta.persistence.repository.example.TastingNoteEntity;
 
 @DisplayName("RsqlQueries")
 class RsqlQueriesTest extends HibernateTest {

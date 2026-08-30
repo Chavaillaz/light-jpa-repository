@@ -7,23 +7,24 @@ import static jakarta.transaction.Transactional.TxType.MANDATORY;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.hibernate.query.restriction.Restriction.unrestricted;
 
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Optional;
-
-import com.chavaillaz.jakarta.persistence.Identifiable;
-import com.github.tennaito.rsql.jpa.JpaCriteriaCountQueryVisitor;
-import com.github.tennaito.rsql.jpa.JpaCriteriaQueryVisitor;
-import cz.jirutka.rsql.parser.RSQLParser;
-import cz.jirutka.rsql.parser.ast.Node;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Root;
 import jakarta.transaction.Transactional;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Optional;
+
+import com.github.tennaito.rsql.jpa.JpaCriteriaCountQueryVisitor;
+import com.github.tennaito.rsql.jpa.JpaCriteriaQueryVisitor;
+import cz.jirutka.rsql.parser.RSQLParser;
+import cz.jirutka.rsql.parser.ast.Node;
 import org.hibernate.query.restriction.Restriction;
 import org.jspecify.annotations.Nullable;
+
+import com.chavaillaz.jakarta.persistence.Identifiable;
 
 /**
  * Base implementation of the {@link Repository} contract, relying on the JPA {@link EntityManager}.

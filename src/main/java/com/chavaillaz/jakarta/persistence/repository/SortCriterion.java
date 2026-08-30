@@ -2,11 +2,10 @@ package com.chavaillaz.jakarta.persistence.repository;
 
 import static java.util.stream.Collectors.joining;
 
+import jakarta.persistence.metamodel.Attribute;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.regex.Pattern;
-
-import jakarta.persistence.metamodel.Attribute;
 
 /**
  * Single ordering criterion of a query, made of the property to sort on and of its direction.
