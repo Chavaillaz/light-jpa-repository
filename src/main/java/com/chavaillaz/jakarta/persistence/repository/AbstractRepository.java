@@ -450,14 +450,31 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
 
     @Override
     public void lock(E entity) {
-        // A detached entity must first be re-attached with a fresh load rather than merged: locking must not
-        // implicitly persist local changes carried by a stale detached copy
-        E managedEntity = entityManager.contains(entity) ? entity : entityManager.find(entityType, entity.getId());
+        E managedEntity = reattach(entity);
+        // Refresh to get last state of the entity if being already locked and changed
+        entityManager.refresh(managedEntity, PESSIMISTIC_WRITE);
+    }
+
+    /**
+     * Re-attaches a possibly detached entity, so that a caller needing a managed copy does not have to repeat the
+     * same {@code contains}-or-{@code find} dance at every call site.
+     * <p>
+     * The lookup is a fresh load rather than a merge: re-attaching must not implicitly persist local field edits
+     * carried by a stale detached copy, which a merge would silently do.
+     *
+     * @param entity The entity to re-attach
+     * @return The managed copy of the entity
+     * @throws NoSuchElementException if the entity is detached and no entity with its identifier exists
+     */
+    protected E reattach(E entity) {
+        if (entityManager.contains(entity)) {
+            return entity;
+        }
+        E managedEntity = entityManager.find(entityType, entity.getId());
         if (managedEntity == null) {
             throw new NoSuchElementException("No entity found with the identifier %s in %s".formatted(entity.getId(), getClass().getSimpleName()));
         }
-        // Refresh to get last state of the entity if being already locked and changed
-        entityManager.refresh(managedEntity, PESSIMISTIC_WRITE);
+        return managedEntity;
     }
 
     @Override
