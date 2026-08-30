@@ -27,10 +27,20 @@ public record Pageable(
     public static final Pageable UNPAGED = new Pageable(null, null, Sort.NONE);
 
     /**
-     * Defaults the ordering to {@link Sort#NONE}, so that every other collaborator can assume it is always set.
+     * Maximum number of items a consumer may request per page, so that a single call cannot drain the table.
+     */
+    public static final int MAX_SIZE = 1_000;
+
+    /**
+     * Defaults the ordering to {@link Sort#NONE}, so that every other collaborator can assume it is always set,
+     * and caps the requested size to {@value #MAX_SIZE}, a {@code null} or non-positive size being left untouched
+     * since it is what {@link #isPaginated()} reads as "no pagination requested".
      */
     public Pageable {
         sort = sort == null ? Sort.NONE : sort;
+        if (size != null && size > MAX_SIZE) {
+            size = MAX_SIZE;
+        }
     }
 
     /**
