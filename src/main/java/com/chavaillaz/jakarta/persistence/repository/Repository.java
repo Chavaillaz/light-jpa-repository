@@ -105,6 +105,14 @@ public interface Repository<E extends Identifiable<I>, I> {
     Optional<E> findById(@Nullable I id);
 
     /**
+     * Checks whether an entity exists for the given identifier, without fetching its state.
+     *
+     * @param id The entity identifier, {@code null} never matching any entity
+     * @return {@code true} if an entity exists for the given identifier, {@code false} otherwise
+     */
+    boolean existsById(@Nullable I id);
+
+    /**
      * Counts all the entities of the current repository.
      *
      * @return The total number of entities

@@ -8,8 +8,10 @@ import static org.hibernate.query.restriction.Restriction.unrestricted;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.metamodel.EntityType;
 import jakarta.transaction.Transactional;
 import java.util.List;
 import java.util.Map;
@@ -130,6 +132,42 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     @Override
     public Optional<E> findById(@Nullable I id) {
         return Optional.ofNullable(id).map(identifier -> entityManager.find(entityType, identifier));
+    }
+
+    @Override
+    public boolean existsById(@Nullable I id) {
+        if (id == null) {
+            return false;
+        }
+
+        Optional<String> idAttribute = singleIdAttributeName();
+        if (idAttribute.isEmpty()) {
+            // A composite identifier declared with an identifier class cannot be expressed as a single equality
+            // predicate; falling back to a lookup still avoids the caller having to unwrap an Optional itself
+            return entityManager.find(entityType, id) != null;
+        }
+
+        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Integer> query = criteriaBuilder.createQuery(Integer.class);
+        Root<E> root = query.from(entityType);
+        query.select(criteriaBuilder.literal(1)).where(criteriaBuilder.equal(root.get(idAttribute.get()), id));
+
+        // A plain list is used rather than getSingleResult(), which would throw when no row matches
+        return !entityManager.createQuery(query).setMaxResults(1).getResultList().isEmpty();
+    }
+
+    /**
+     * Gets the name of the single identifier attribute of the managed entity, as reported by the metamodel.
+     *
+     * @return The attribute name, or {@link Optional#empty()} for a composite identifier declared with an
+     * identifier class, spread over several attributes with no single path to compare as a whole
+     */
+    private Optional<String> singleIdAttributeName() {
+        EntityType<E> entityMetamodel = entityManager.getMetamodel().entity(entityType);
+        if (!entityMetamodel.hasSingleIdAttribute()) {
+            return Optional.empty();
+        }
+        return Optional.of(entityMetamodel.getId(entityMetamodel.getIdType().getJavaType()).getName());
     }
 
     /**
