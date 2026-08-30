@@ -55,12 +55,12 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     /**
      * @see #ordering()
      */
-    private @Nullable EntityOrdering<E> ordering;
+    private volatile @Nullable EntityOrdering<E> ordering;
 
     /**
      * @see #queries()
      */
-    private @Nullable EntityQueries<E> queries;
+    private volatile @Nullable EntityQueries<E> queries;
 
     /**
      * Creates a repository.
@@ -74,28 +74,47 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     }
 
     /**
-     * Gets the ordering rules of the repository.
+     * Gets the ordering rules of the repository, built on first use rather than eagerly in the constructor so
+     * that {@link #getDefaultOrders} and {@link #searchableProperties} are never invoked before the subclass is
+     * fully constructed.
+     * <p>
+     * Built under double checked locking rather than plainly, since a repository is not guaranteed to be confined
+     * to a single thread by whatever scope its owning dependency injection container gives it: without it, two
+     * threads racing on the first call could each observe a stale {@code null} and build their own instance.
      *
      * @return The ordering rules, resolving the sortable properties and building the query ordering
      */
     protected EntityOrdering<E> ordering() {
-        if (ordering == null) {
-            // The hooks are passed as method references, so that the overriding subclasses stay in charge of them.
-            ordering = new EntityOrdering<>(entityManager, entityType, this::getDefaultOrders, this::searchableProperties);
+        EntityOrdering<E> current = ordering;
+        if (current == null) {
+            synchronized (this) {
+                current = ordering;
+                if (current == null) {
+                    // The hooks are passed as method references, so that the overriding subclasses stay in charge
+                    ordering = current = new EntityOrdering<>(entityManager, entityType, this::getDefaultOrders, this::searchableProperties);
+                }
+            }
         }
-        return ordering;
+        return current;
     }
 
     /**
-     * Gets the query support of the repository.
+     * Gets the query support of the repository, built on first use for the same reason and under the same double
+     * checked locking as {@link #ordering()}.
      *
      * @return The query support, building the search, count and scroll queries from the restrictions and criteria
      */
     protected EntityQueries<E> queries() {
-        if (queries == null) {
-            queries = new EntityQueries<>(entityManager, entityType, ordering(), cursorCodec(), cursorKeyCodec());
+        EntityQueries<E> current = queries;
+        if (current == null) {
+            synchronized (this) {
+                current = queries;
+                if (current == null) {
+                    queries = current = new EntityQueries<>(entityManager, entityType, ordering(), cursorCodec(), cursorKeyCodec());
+                }
+            }
         }
-        return queries;
+        return current;
     }
 
     @Override
