@@ -13,13 +13,10 @@ import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.coff
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.namesOf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.function.Function;
 
-import cz.jirutka.rsql.parser.ast.Node;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -216,139 +213,6 @@ class CoffeeSearchTest extends HibernateTest {
             assertThatIllegalArgumentException()
                     .isThrownBy(() -> withRepository(repository -> repository.findAll(0, 3, Sort.parse("notes"))))
                     .withMessageContaining("collection property notes");
-        }
-
-    }
-
-    @Nested
-    @DisplayName("with an RSQL query")
-    class Rsql {
-
-        private List<CoffeeEntity> searchAll(String rsql) {
-            return withRepository(repository -> repository.search(rsql));
-        }
-
-        private long countAll(String rsql) {
-            return withRepository(repository -> repository.count(rsql));
-        }
-
-        @ParameterizedTest(name = "{0} matches {1}")
-        @CsvSource(delimiter = ':', value = {
-                "origin==Ethiopia                : 3",
-                "origin!=Ethiopia                : 4",
-                "roast==LIGHT                    : 3",
-                "strength=gt=5                   : 3",
-                "strength=ge=5                   : 4",
-                "price=lt=30                     : 3",
-                "origin==Ethiopia;roast==LIGHT   : 1",
-                "origin==Ethiopia,origin==Panama : 4",
-                "name==Geisha                    : 1",
-                "origin=in=(Ethiopia,Panama)     : 4",
-        })
-        @DisplayName("filters the menu")
-        void filters(String rsql, long expected) {
-            assertThat(countAll(rsql)).isEqualTo(expected);
-            assertThat(searchAll(rsql)).hasSize((int) expected);
-        }
-
-        @Test
-        @DisplayName("falls back on findAll when the query is blank")
-        void fallsBackOnFindAll() {
-            assertThat(namesOf(searchAll("   "))).containsExactlyElementsOf(MENU);
-            assertThat(namesOf(searchAll(null))).containsExactlyElementsOf(MENU);
-            assertThat(countAll(null)).isEqualTo(7);
-        }
-
-        @Test
-        @DisplayName("applies the default ordering even when unpaged, regardless of the insertion order")
-        void ordersAnUnpagedQueryWithTheDefault() {
-            // Inserted in reverse alphabetical order, opposite of the default one, so that a query relying on the
-            // insertion or identifier order instead of an actual ORDER BY would be caught red handed
-            persist(
-                    coffee("Zambia AA", ETHIOPIA, Roast.LIGHT, "10.00", 5),
-                    coffee("Yirga Batch", ETHIOPIA, Roast.LIGHT, "10.00", 5),
-                    coffee("Xigera", ETHIOPIA, Roast.LIGHT, "10.00", 5));
-
-            assertThat(namesOf(searchAll("origin==" + ETHIOPIA)))
-                    .containsExactly(HARRAR, SIDAMO, "Xigera", "Yirga Batch", YIRGACHEFFE, "Zambia AA");
-        }
-
-        @Test
-        @DisplayName("paginates and orders the filtered results")
-        void paginatesTheResults() {
-            PaginationResult<CoffeeEntity> result = withRepository(repository ->
-                    repository.search("origin==" + ETHIOPIA, 0, 2, Sort.parse("-price")));
-
-            assertThat(namesOf(result)).containsExactly(YIRGACHEFFE, SIDAMO);
-            assertThat(result.totalItems()).isEqualTo(3);
-            assertThat(result.totalPages()).isEqualTo(2);
-        }
-
-        @Test
-        @DisplayName("returns distinct entities and a consistent count when the query joins a collection")
-        void deduplicatesTheCollectionJoins() {
-            // Yirgacheffe has both notes, so a plain join would return it twice
-            PaginationResult<CoffeeEntity> result = withRepository(repository ->
-                    repository.search("notes==Citrus,notes==Floral", 0, 10));
-
-            assertThat(namesOf(result)).containsExactly(BOURBON_POINTU, GEISHA, SIDAMO, YIRGACHEFFE);
-            assertThat(result.totalItems())
-                    .as("the count is distinct too, otherwise it would drift from the results")
-                    .isEqualTo(4);
-        }
-
-        @Test
-        @DisplayName("filters on an association")
-        void filtersOnAnAssociation() {
-            assertThat(namesOf(searchAll("roaster==\"Moka Brothers\"")))
-                    .containsExactly(BLUE_MOUNTAIN, BOURBON_POINTU, GEISHA, KONA);
-        }
-
-        @Test
-        @DisplayName("rejects a malformed query")
-        void rejectsAMalformedQuery() {
-            assertThatThrownBy(() -> withRepository(repository -> repository.count("origin=!=")))
-                    .isInstanceOf(cz.jirutka.rsql.parser.RSQLParserException.class);
-        }
-
-        @Test
-        @DisplayName("rejects a query on a property that is not searchable")
-        void rejectsANonSearchableProperty() {
-            assertThatIllegalArgumentException()
-                    .isThrownBy(() -> withRepository(repository -> repository.count("roastedAt=gt=0")))
-                    .withMessageContaining("Cannot sort or filter on the unknown property roastedAt");
-        }
-
-        @Test
-        @DisplayName("resolves a searchable property to the entity attribute path it is aliased to")
-        void resolvesAnAliasedPropertyForFiltering() {
-            assertThat(countAll("roaster==\"Moka Brothers\"")).isEqualTo(4);
-        }
-
-        @Test
-        @DisplayName("routes count(String) through the overridable count(Node) hook")
-        void routesCountThroughTheNodeHook() {
-            long count = withRepository(CountingRepositoryJpa.class,
-                    repository -> repository.count("origin==" + ETHIOPIA));
-
-            assertThat(count).as("the override adds 1000 to whatever the real count is").isEqualTo(1003);
-        }
-
-        /**
-         * Overrides {@code count(Node)} to prove {@link AbstractRepository#count(String)} actually routes through
-         * it, rather than bypassing it by calling {@link RsqlQueries#count(Node)} directly.
-         */
-        private static class CountingRepositoryJpa extends CoffeeRepositoryJpa {
-
-            CountingRepositoryJpa(EntityManager entityManager) {
-                super(entityManager);
-            }
-
-            @Override
-            protected long count(Node rsqlNode) {
-                return super.count(rsqlNode) + 1000;
-            }
-
         }
 
     }

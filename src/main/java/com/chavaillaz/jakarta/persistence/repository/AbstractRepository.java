@@ -4,7 +4,6 @@ import static com.chavaillaz.jakarta.persistence.repository.Pageable.sortedBy;
 import static com.chavaillaz.jakarta.persistence.repository.Pageable.unpaged;
 import static jakarta.persistence.LockModeType.PESSIMISTIC_WRITE;
 import static jakarta.transaction.Transactional.TxType.MANDATORY;
-import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.hibernate.query.restriction.Restriction.unrestricted;
 
 import jakarta.persistence.EntityManager;
@@ -17,10 +16,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
-import com.github.tennaito.rsql.jpa.JpaCriteriaCountQueryVisitor;
-import com.github.tennaito.rsql.jpa.JpaCriteriaQueryVisitor;
-import cz.jirutka.rsql.parser.RSQLParser;
-import cz.jirutka.rsql.parser.ast.Node;
 import org.hibernate.query.restriction.Restriction;
 import org.jspecify.annotations.Nullable;
 
@@ -29,10 +24,10 @@ import com.chavaillaz.jakarta.persistence.Identifiable;
 /**
  * Base implementation of the {@link Repository} contract, relying on the JPA {@link EntityManager}.
  * <p>
- * The queries are delegated to three collaborators, reachable through {@link #ordering()},
- * {@link #queries()} and {@link #rsqlQueries()}, so that each concern stays isolated and testable on its own.
- * They are created on the first use, the entity manager being passed to the repository constructor so that
- * the subclasses can stay simple and dependency-injected by their constructor.
+ * The queries are delegated to two collaborators, reachable through {@link #ordering()} and {@link #queries()},
+ * so that each concern stays isolated and testable on its own. They are created on the first use, the entity
+ * manager being passed to the repository constructor so that the subclasses can stay simple and
+ * dependency-injected by their constructor.
  * <p>
  * Only the methods a repository writes its business queries with are exposed here; the plumbing stays on the
  * collaborators and on the {@link Pageables} and {@link Criteria} helpers, so that overriding cannot break
@@ -58,11 +53,6 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     protected final Class<E> entityType;
 
     /**
-     * The parser converting the RSQL queries into nodes.
-     */
-    protected final RSQLParser rsqlParser;
-
-    /**
      * @see #ordering()
      */
     private @Nullable EntityOrdering<E> ordering;
@@ -73,31 +63,14 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     private @Nullable EntityQueries<E> queries;
 
     /**
-     * @see #rsqlQueries()
-     */
-    private @Nullable RsqlQueries<E> rsqlQueries;
-
-    /**
-     * Creates a repository using the default RSQL parser.
+     * Creates a repository.
      *
      * @param entityManager The entity manager the repository operates on
      * @param entityType    The type of the managed entity
      */
     protected AbstractRepository(EntityManager entityManager, Class<E> entityType) {
-        this(entityManager, entityType, new RSQLParser());
-    }
-
-    /**
-     * Creates a repository using the given RSQL parser, to support custom operators for instance.
-     *
-     * @param entityManager The entity manager the repository operates on
-     * @param entityType    The type of the managed entity
-     * @param rsqlParser    The parser used to build the RSQL query nodes
-     */
-    protected AbstractRepository(EntityManager entityManager, Class<E> entityType, RSQLParser rsqlParser) {
         this.entityManager = entityManager;
         this.entityType = entityType;
-        this.rsqlParser = rsqlParser;
     }
 
     /**
@@ -125,19 +98,6 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
         return queries;
     }
 
-    /**
-     * Gets the RSQL support of the repository.
-     *
-     * @return The RSQL support, translating the filter expressions into predicates over the searchable properties
-     */
-    protected RsqlQueries<E> rsqlQueries() {
-        if (rsqlQueries == null) {
-            // The hooks are passed as method references, so that the overriding subclasses stay in charge of them.
-            rsqlQueries = new RsqlQueries<>(entityManager, entityType, rsqlParser, this::createQueryVisitor, this::createCountVisitor, ordering(), cursorCodec(), cursorKeyCodec());
-        }
-        return rsqlQueries;
-    }
-
     @Override
     public PaginationResult<E> findAll(Pageable pageable) {
         return queries().search(unrestricted(), null, pageable);
@@ -151,23 +111,6 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     @Override
     public Optional<E> findById(@Nullable I id) {
         return Optional.ofNullable(id).map(identifier -> entityManager.find(entityType, identifier));
-    }
-
-    @Override
-    public PaginationResult<E> search(@Nullable String rsql, Pageable pageable) {
-        if (isBlank(rsql)) {
-            return findAll(pageable);
-        }
-
-        return rsqlQueries().search(rsqlQueries().parse(rsql), pageable);
-    }
-
-    @Override
-    public CursorResult<E> search(@Nullable String rsql, Cursor cursor) {
-        if (isBlank(rsql)) {
-            return findAll(cursor);
-        }
-        return rsqlQueries().scroll(rsqlQueries().parse(rsql), cursor);
     }
 
     /**
@@ -353,26 +296,6 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
         return queries().count(unrestricted(), null);
     }
 
-    @Override
-    public long count(@Nullable String rsql) {
-        if (isBlank(rsql)) {
-            return count();
-        }
-
-        return count(rsqlQueries().parse(rsql));
-    }
-
-    /**
-     * Counts the entities matching the given RSQL query, without any pagination applied.
-     *
-     * @param rsqlNode The parsed RSQL query
-     * @return The total number of matching entities
-     * @see RsqlQueries#count(Node)
-     */
-    protected long count(Node rsqlNode) {
-        return rsqlQueries().count(rsqlNode);
-    }
-
     /**
      * Counts the entities matching the given restriction.
      *
@@ -523,28 +446,6 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      */
     protected CursorKeyCodec cursorKeyCodec() {
         return CursorKeyCodec.DEFAULT;
-    }
-
-    /**
-     * Creates the visitor converting an RSQL query node into a JPA criteria query returning the matching entities.
-     * <p>
-     * Override to customize the property mapping, the argument parsing or the predicate building.
-     *
-     * @return The visitor to use to build the search query
-     */
-    protected JpaCriteriaQueryVisitor<E> createQueryVisitor() {
-        return RsqlQueries.defaultQueryVisitor(entityType);
-    }
-
-    /**
-     * Creates the visitor converting an RSQL query node into a JPA criteria query counting the matching entities.
-     * <p>
-     * Override to customize the property mapping, the argument parsing or the predicate building.
-     *
-     * @return The visitor to use to build the count query
-     */
-    protected JpaCriteriaCountQueryVisitor<E> createCountVisitor() {
-        return RsqlQueries.defaultCountVisitor(entityType);
     }
 
     @Override

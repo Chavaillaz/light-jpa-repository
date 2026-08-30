@@ -2,7 +2,6 @@ package com.chavaillaz.jakarta.persistence.repository;
 
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.BLUE_MOUNTAIN;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.BOURBON_POINTU;
-import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.ETHIOPIA;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.GEISHA;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.HARRAR;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.KONA;
@@ -54,10 +53,6 @@ class CoffeeCursorTest extends HibernateTest {
 
     private CursorResult<CoffeeEntity> page(String token, Integer size, Sort sort) {
         return withRepository(repository -> repository.findAll(token, size, sort));
-    }
-
-    private CursorResult<CoffeeEntity> searchPage(String rsql, String token, int size, Sort sort) {
-        return withRepository(repository -> repository.search(rsql, token, size, sort));
     }
 
     @Test
@@ -212,37 +207,6 @@ class CoffeeCursorTest extends HibernateTest {
         assertThat(result.hasPrevious()).isFalse();
         assertThat(result.next()).isNull();
         assertThat(result.previous()).isNull();
-    }
-
-    @Test
-    @DisplayName("scrolls through an RSQL query")
-    void scrollsThroughAnRsqlQuery() {
-        CursorResult<CoffeeEntity> first = searchPage("origin==" + ETHIOPIA, null, 2, Sort.NONE);
-        assertThat(namesOf(first)).containsExactly(HARRAR, SIDAMO);
-
-        CursorResult<CoffeeEntity> second = searchPage("origin==" + ETHIOPIA, first.next(), 2, Sort.NONE);
-        assertThat(namesOf(second)).containsExactly(YIRGACHEFFE);
-        assertThat(second.hasNext()).isFalse();
-        assertThat(second.hasPrevious()).isTrue();
-    }
-
-    @Test
-    @DisplayName("scrolls through an RSQL query joining a collection, without duplicating the rows")
-    void scrollsThroughACollectionJoin() {
-        String rsql = "notes==Citrus,notes==Floral";
-
-        CursorResult<CoffeeEntity> first = searchPage(rsql, null, 3, Sort.NONE);
-        assertThat(namesOf(first)).containsExactly(BOURBON_POINTU, GEISHA, SIDAMO);
-
-        CursorResult<CoffeeEntity> second = searchPage(rsql, first.next(), 3, Sort.NONE);
-        assertThat(namesOf(second)).containsExactly(YIRGACHEFFE);
-    }
-
-    @Test
-    @DisplayName("falls back on findAll when the RSQL query is blank")
-    void fallsBackOnFindAll() {
-        assertThat(namesOf(searchPage("  ", null, 2, Sort.NONE)))
-                .containsExactly(BLUE_MOUNTAIN, BOURBON_POINTU);
     }
 
     @Test

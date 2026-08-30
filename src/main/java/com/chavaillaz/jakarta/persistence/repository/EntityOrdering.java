@@ -25,8 +25,6 @@ import java.util.function.BiFunction;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
-import cz.jirutka.rsql.parser.ast.Node;
-
 /**
  * Ordering rules of a repository, resolving the properties exposed by the API into entity attributes and building
  * the ordering of the queries; see {@link Sort} for why the identifier of the entity is always appended.
@@ -166,7 +164,8 @@ public class EntityOrdering<E> {
 
     /**
      * Resolves a property exposed by the API into the path of the corresponding entity attribute, be it for
-     * sorting or, through {@link RsqlQueries#resolveProperties(Node)}, for RSQL filtering.
+     * sorting or for a dynamic filter expression built on top of this class, such as the RSQL support of the
+     * sibling {@code rsql-jpa-repository} artifact.
      * <p>
      * When the repository declares searchable properties, only those are accepted, which both restricts the
      * attributes the API consumers can sort or filter on and decouples the public naming from the entity one.

@@ -166,11 +166,6 @@ class CoffeeRepositoryTest extends HibernateTest {
         runInTransaction(entityManager -> {
             CoffeeRepository repository = new CoffeeRepositoryJpa(entityManager);
             assertThat(repository.count()).isEqualTo(1);
-            assertThat(repository.count(null)).as("a null query counts everything").isEqualTo(1);
-            assertThat(repository.count("")).isEqualTo(1);
-            assertThat(repository.count("   ")).isEqualTo(1);
-            assertThat(repository.count("origin==" + ETHIOPIA)).isEqualTo(1);
-            assertThat(repository.count("origin==Brazil")).isZero();
         });
     }
 

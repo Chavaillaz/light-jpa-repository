@@ -9,7 +9,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-import cz.jirutka.rsql.parser.RSQLParserException;
 import org.jspecify.annotations.Nullable;
 
 import com.chavaillaz.jakarta.persistence.Identifiable;
@@ -113,83 +112,6 @@ public interface Repository<E extends Identifiable<I>, I> {
     long count();
 
     /**
-     * Counts the entities matching the given RSQL filter expression.
-     *
-     * @param rsql The RSQL filter expression, {@code null} or blank to count all the entities
-     * @return The number of matching entities
-     * @throws RSQLParserException      if the expression is not valid RSQL
-     * @throws IllegalArgumentException if the expression refers to a property that is not searchable
-     */
-    long count(@Nullable String rsql);
-
-    /**
-     * Searches for entities matching the given RSQL filter expression, with no pagination and the default
-     * ordering.
-     *
-     * @param rsql The RSQL filter expression, {@code null} or blank to match all the entities
-     * @return The corresponding entities
-     * @see #search(String, Pageable)
-     */
-    default List<E> search(@Nullable String rsql) {
-        return search(rsql, Pageable.UNPAGED).items();
-    }
-
-    /**
-     * Searches for entities matching the given RSQL filter expression, with no pagination.
-     *
-     * @param rsql The RSQL filter expression, {@code null} or blank to match all the entities
-     * @param sort The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
-     * @return The corresponding entities
-     * @see Pageable#sortedBy(Sort)
-     * @see #search(String, Pageable)
-     */
-    default List<E> search(@Nullable String rsql, Sort sort) {
-        return search(rsql, sortedBy(sort)).items();
-    }
-
-    /**
-     * Searches for entities matching the given RSQL filter expression, ordered by the default ordering of the
-     * repository.
-     *
-     * @param rsql The RSQL filter expression, {@code null} or blank to match all the entities
-     * @param page The page number, starting at zero, or {@code null} to disable the pagination
-     * @param size The number of items per page, or {@code null} to disable the pagination
-     * @return The entities of the requested page with the total number of matching entities
-     * @see Pageable#of(Integer, Integer)
-     * @see #search(String, Pageable)
-     */
-    default PaginationResult<E> search(@Nullable String rsql, @Nullable Integer page, @Nullable Integer size) {
-        return search(rsql, Pageable.of(page, size));
-    }
-
-    /**
-     * Searches for entities matching the given RSQL filter expression.
-     *
-     * @param rsql The RSQL filter expression, {@code null} or blank to match all the entities
-     * @param page The page number, starting at zero, or {@code null} to disable the pagination
-     * @param size The number of items per page, or {@code null} to disable the pagination
-     * @param sort The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
-     * @return The entities of the requested page with the total number of matching entities
-     * @see Pageable#of(Integer, Integer, Sort)
-     * @see #search(String, Pageable)
-     */
-    default PaginationResult<E> search(@Nullable String rsql, @Nullable Integer page, @Nullable Integer size, Sort sort) {
-        return search(rsql, Pageable.of(page, size, sort));
-    }
-
-    /**
-     * Searches for entities matching the given RSQL filter expression.
-     *
-     * @param rsql     The RSQL filter expression, {@code null} or blank to match all the entities
-     * @param pageable The requested page and ordering, {@link Pageable#UNPAGED} to disable the pagination
-     * @return The corresponding page, never {@code null}
-     * @throws RSQLParserException      if the expression is not valid RSQL
-     * @throws IllegalArgumentException if the expression refers to a property that is not searchable, or if the
-     *                                  requested ordering is not usable
-     */
-    PaginationResult<E> search(@Nullable String rsql, Pageable pageable);
-
-    /**
      * Scrolls through all the existing entities of the current repository, seeking to the requested position
      * instead of skipping the preceding rows.
      * <p>
@@ -261,36 +183,6 @@ public interface Repository<E extends Identifiable<I>, I> {
      */
     default Stream<E> streamAll() {
         return streamAll(Sort.NONE, Cursor.DEFAULT_SIZE);
-    }
-
-    /**
-     * Scrolls through the entities matching the given RSQL filter expression, seeking to the requested position
-     * instead of skipping the preceding rows.
-     *
-     * @param rsql   The RSQL filter expression, {@code null} or blank to match all the entities
-     * @param cursor The requested position, size and ordering
-     * @return The corresponding page with the tokens of the surrounding ones
-     * @throws RSQLParserException      if the expression is not valid RSQL
-     * @throws IllegalArgumentException if the expression refers to a property that is not searchable, if the
-     *                                  ordering refers to an unknown property, to a collection, or if the cursor
-     *                                  is malformed or was issued for another ordering
-     */
-    CursorResult<E> search(@Nullable String rsql, Cursor cursor);
-
-    /**
-     * Scrolls through the entities matching the given RSQL filter expression, seeking to the requested position
-     * instead of skipping the preceding rows.
-     *
-     * @param rsql   The RSQL query, all the entities being scrolled through when blank
-     * @param cursor The opaque position of the previous page, {@code null} or blank to request the first page
-     * @param size   The number of items per page, or {@code null} to apply {@link Cursor#DEFAULT_SIZE}
-     * @param sort   The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
-     * @return The corresponding page with the tokens of the surrounding ones
-     * @see Cursor#of(String, Integer, Sort)
-     * @see #search(String, Cursor)
-     */
-    default CursorResult<E> search(@Nullable String rsql, @Nullable String cursor, @Nullable Integer size, Sort sort) {
-        return search(rsql, Cursor.of(cursor, size, sort));
     }
 
     /**

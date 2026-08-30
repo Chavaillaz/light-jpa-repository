@@ -8,9 +8,12 @@
 Library to help implementing JPA based (Java Persistence API) repositories.
 
 It gives you a `Repository` base implementation covering the usual CRUD operations, offset and cursor (keyset)
-pagination, sorting, type-safe filtering with the Hibernate `Restriction` API and dynamic filtering with
-[RSQL](https://github.com/jirutka/rsql-parser) query strings — without generating queries for you like a heavier
-framework such as Spring Data would. You stay in control of every custom query you write.
+pagination, sorting and type-safe filtering with the Hibernate `Restriction` API — without generating queries for
+you like a heavier framework such as Spring Data would. You stay in control of every custom query you write.
+
+Dynamic filtering exposed to the API consumers as [RSQL](https://github.com/jirutka/rsql-parser) query strings is
+not part of this library: it is an optional extension, built on the very same collaborators, provided by the
+sibling [rsql-jpa-repository](https://github.com/chavaillaz/rsql-jpa-repository).
 
 ## Installation
 
@@ -64,9 +67,7 @@ The library's goal is to provide the following essential methods for your reposi
 
 - **`findAll`**: Retrieves the entities of the repository, with no, offset or cursor pagination.
 - **`getById`** and **`findById`**: Fetches an entity by its identifier.
-- **`search`**: Filters entities with an [RSQL](#filtering-with-rsql) query string, with no, offset or cursor
-  pagination.
-- **`count`**: Counts the entities of the repository, optionally matching an RSQL query.
+- **`count`**: Counts the entities of the repository.
 - **`lock`**: Applies a pessimistic lock to an entity, re-attaching and refreshing it first if needed.
 - **`refresh`**: Reloads the state of a managed entity from the database, discarding local changes.
 - **`getReference`**: Retrieves a reference to an entity, with its state lazily fetched.
@@ -215,8 +216,9 @@ Sort sort = Sort.parse("-price,name");
 The identifier of the entity is always appended by the repository, so that the ordering stays unique and the
 pagination therefore stable, whatever is requested. By default, every attribute of the entity can be sorted on;
 override `searchableProperties()` in your repository to restrict which properties the API consumers may reach and to
-decouple their public naming from the entity one — this restriction applies to [RSQL filtering](#filtering-with-rsql)
-too, both sharing the very same map — and `getDefaultOrders()` to change the ordering applied when none is requested:
+decouple their public naming from the entity one — an extension built on top, such as the RSQL filtering of
+[rsql-jpa-repository](https://github.com/chavaillaz/rsql-jpa-repository), shares this very same map — and
+`getDefaultOrders()` to change the ordering applied when none is requested:
 
 ```java
 @Override
@@ -305,11 +307,6 @@ a transactional method.
 
 ## Filtering
 
-Two complementary ways are available to filter the entities of a repository: type-safe restrictions and criteria,
-written once in the repository, and dynamic RSQL queries, written by the API consumers.
-
-### Restrictions and criteria
-
 A `Restriction`, from `org.hibernate.query.restriction`, is checked at compile time against the JPA static
 metamodel:
 
@@ -335,22 +332,9 @@ public static Criteria<CoffeeEntity> tasting(String flavour) {
 }
 ```
 
-### Filtering with RSQL
-
-`search(String rsql, ...)` accepts an [RSQL](https://github.com/jirutka/rsql-parser) filter expression, letting the
-API consumers combine conditions dynamically:
-
-```java
-coffeeRepository.search("origin==Ethiopia;strength=gt=5", Pageable.of(0, 20, Sort.parse("-price")));
-coffeeRepository.search("notes.flavour==Citrus,notes.flavour==Floral", Cursor.first(20, Sort.NONE));
-```
-
-RSQL filtering and sorting share the very same `searchableProperties()`: when the repository overrides it, an RSQL
-selector must either be one of the declared public names, or already be the entity attribute path one of them is
-aliased to — so `roaster==...` works, and so does `roaster.name==...` since `roaster` already exposes it, but a path
-that is the target of no declared property is rejected. The example above assumes an open repository, `searchableProperties()`
-not overridden, so every attribute of the entity is reachable as is, nested and collection properties included, such
-as `notes.flavour`.
+For dynamic filtering exposed to the API consumers as query strings, such as `origin==Ethiopia;strength=gt=5`, see
+the [rsql-jpa-repository](https://github.com/chavaillaz/rsql-jpa-repository) extension, built on the very same
+`searchableProperties()` and ordering rules.
 
 ## Locking
 

@@ -11,13 +11,13 @@
  * instead of silently misbehaving at runtime; that overload alone needs a persistence unit mapping the entity to
  * have already been bootstrapped once, since that is what populates the generated metamodel fields it reads.
  * <p>
- * {@link com.chavaillaz.jakarta.persistence.repository.EntityOrdering},
- * {@link com.chavaillaz.jakarta.persistence.repository.EntityQueries} and
- * {@link com.chavaillaz.jakarta.persistence.repository.RsqlQueries} are the actual plumbing, translating the
+ * {@link com.chavaillaz.jakarta.persistence.repository.EntityOrdering} and
+ * {@link com.chavaillaz.jakarta.persistence.repository.EntityQueries} are the actual plumbing, translating the
  * requests above into JPA criteria queries; they are considered implementation details of
  * {@code AbstractRepository} rather than a public API, and are documented for the maintainers of this package
  * rather than for the authors of a repository, who are only expected to use the {@code protected} methods
- * {@code AbstractRepository} exposes.
+ * {@code AbstractRepository} exposes. Dynamic RSQL filtering is not part of this package: it is an optional
+ * extension provided by the sibling {@code rsql-jpa-repository} artifact, built on top of the same collaborators.
  * <p>
  * The keyset (cursor) pagination additionally relies on {@link com.chavaillaz.jakarta.persistence.repository.Keysets}
  * to build the seek predicate and the {@code ORDER BY} clause from a resolved ordering, and on
