@@ -6,6 +6,7 @@ import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import java.lang.reflect.Field;
+import java.lang.reflect.InaccessibleObjectException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
@@ -176,7 +177,9 @@ public final class Keysets {
                     return getter.invoke(owner);
                 } catch (NoSuchMethodException e) {
                     // Try the next candidate
-                } catch (ReflectiveOperationException e) {
+                } catch (ReflectiveOperationException | InaccessibleObjectException | SecurityException e) {
+                    // InaccessibleObjectException and SecurityException are unchecked and thrown by setAccessible
+                    // itself, not by the reflective call, so they do not extend ReflectiveOperationException
                     throw new IllegalStateException("Cannot read the cursor key " + attribute, e);
                 }
             }
@@ -186,7 +189,7 @@ public final class Keysets {
                 return field.get(owner);
             } catch (NoSuchFieldException e) {
                 // Try the superclass
-            } catch (ReflectiveOperationException e) {
+            } catch (ReflectiveOperationException | InaccessibleObjectException | SecurityException e) {
                 throw new IllegalStateException("Cannot read the cursor key " + attribute, e);
             }
         }
