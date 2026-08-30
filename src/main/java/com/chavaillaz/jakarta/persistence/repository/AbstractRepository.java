@@ -333,8 +333,8 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * <p>
      * The restriction carries the reusable scope of the repository, the criteria what is specific to a single
      * lookup. Both are combined with the seek predicate of the cursor, so a page can never escape the scope it was
-     * issued within. A criteria joining a collection must apply a distinct itself, a duplicated boundary row
-     * shortening the page.
+     * issued within. A restriction or a criteria joining a collection is automatically made distinct, so that a
+     * duplicated boundary row does not silently shorten the page.
      *
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
      * @param criteria    The additional criteria to apply, or {@code null}

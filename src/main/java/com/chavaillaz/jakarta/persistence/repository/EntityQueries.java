@@ -6,6 +6,7 @@ import static org.hibernate.query.restriction.Restriction.unrestricted;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.From;
 import jakarta.persistence.criteria.Predicate;
 import java.util.List;
 import java.util.Optional;
@@ -75,6 +76,19 @@ public class EntityQueries<E> {
     }
 
     /**
+     * Checks if the given root joins a to-many association, directly or through another join, an entity being
+     * otherwise duplicated in the results as many times as it has matching children, which also breaks the
+     * pagination and the count.
+     *
+     * @param from The root or join to inspect
+     * @return {@code true} if the joins may produce duplicated rows, {@code false} otherwise
+     */
+    protected static boolean hasCollectionJoin(From<?, ?> from) {
+        return from.getJoins().stream()
+                .anyMatch(join -> join.getAttribute().isCollection() || hasCollectionJoin(join));
+    }
+
+    /**
      * Builds the selection query matching the given restriction and additional criteria, ordered by the requested
      * criteria or by the default ones.
      * <p>
@@ -95,6 +109,12 @@ public class EntityQueries<E> {
                 .augment((criteriaBuilder, query, root) -> {
                     if (criteria != null) {
                         query.where(query.getRestriction(), criteria.toPredicate(criteriaBuilder, query, root));
+                    }
+                    // A restriction or a criteria joining a to-many association duplicates the root entity as
+                    // many times as it has matching children; distinct is applied automatically rather than
+                    // left to the caller, so a forgotten join cannot silently corrupt the results or the count
+                    if (hasCollectionJoin(root)) {
+                        query.distinct(true);
                     }
                     query.orderBy(ordering.buildOrders(root, sort));
                 })
@@ -200,6 +220,9 @@ public class EntityQueries<E> {
                     }
                     if (position != null) {
                         restrict(criteriaBuilder, query, Keysets.seek(criteriaBuilder, root, direction, position.values()));
+                    }
+                    if (hasCollectionJoin(root)) {
+                        query.distinct(true);
                     }
                     query.orderBy(Keysets.toOrders(criteriaBuilder, root, direction));
                 })
