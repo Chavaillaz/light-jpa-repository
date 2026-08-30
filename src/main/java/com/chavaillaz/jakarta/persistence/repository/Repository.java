@@ -253,6 +253,17 @@ public interface Repository<E extends Identifiable<I>, I> {
     E save(E entity);
 
     /**
+     * Saves the given entities, persisting the ones with no identifier yet, merging the others.
+     *
+     * @param entities The entities to save
+     * @return The saved entities, in the same order
+     * @see #save(Identifiable)
+     */
+    default List<E> saveAll(Collection<E> entities) {
+        return entities.stream().map(this::save).toList();
+    }
+
+    /**
      * Deletes the entity with the given identifier, doing nothing when it does not exist.
      *
      * @param id The entity identifier
@@ -272,5 +283,15 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @throws NoSuchElementException   if the entity is detached and no entity with its identifier exists
      */
     void delete(E entity);
+
+    /**
+     * Deletes the given entities.
+     *
+     * @param entities The entities to delete
+     * @see #delete(Identifiable)
+     */
+    default void deleteAll(Collection<E> entities) {
+        entities.forEach(this::delete);
+    }
 
 }

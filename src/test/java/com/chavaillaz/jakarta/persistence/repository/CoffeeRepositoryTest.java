@@ -63,6 +63,7 @@ class CoffeeRepositoryTest extends HibernateTest {
         testDeleteUnknownId();
         testDeleteById(identifier);
         testDelete();
+        testSaveAllAndDeleteAll();
     }
 
     private void testCreate(MutableLong identifier) {
@@ -365,6 +366,24 @@ class CoffeeRepositoryTest extends HibernateTest {
                     .as("a detached entity is re-attached before being removed")
                     .isEmpty();
             assertThat(repository.count()).isZero();
+        });
+    }
+
+    private void testSaveAllAndDeleteAll() {
+        runInTransaction(entityManager -> {
+            CoffeeRepository repository = new CoffeeRepositoryJpa(entityManager);
+
+            List<CoffeeEntity> saved = repository.saveAll(List.of(
+                    coffee("Batch One", "Peru", Roast.LIGHT, "12.00", 3),
+                    coffee("Batch Two", "Peru", Roast.LIGHT, "13.00", 3)));
+            List<Long> savedIds = saved.stream().map(CoffeeEntity::getId).toList();
+
+            assertThat(savedIds).as("every saved entity is assigned an identifier").doesNotContainNull();
+            assertThat(repository.findAllById(savedIds)).hasSize(2);
+
+            repository.deleteAll(saved);
+
+            assertThat(repository.findAllById(savedIds)).isEmpty();
         });
     }
 
