@@ -57,6 +57,8 @@ class CoffeeRepositoryTest extends HibernateTest {
         testCustomFindWithCriteria();
         testCombinedCriteria();
         testRelatedSearch(identifier);
+        testDeleteTransient();
+        testDeleteUnknownId();
         testDeleteById(identifier);
         testDelete();
     }
@@ -283,6 +285,31 @@ class CoffeeRepositoryTest extends HibernateTest {
             List<TastingNoteEntity> notes = repository.findNotesOf(coffee);
 
             assertThat(notes).extracting(TastingNoteEntity::getFlavour).containsExactly("Citrus");
+        });
+    }
+
+    private void testDeleteTransient() {
+        runInTransaction(entityManager -> {
+            CoffeeRepository repository = new CoffeeRepositoryJpa(entityManager);
+            CoffeeEntity transientCoffee = coffee("Unsaved", "Nowhere", Roast.LIGHT, "1.00", 1);
+
+            assertThatExceptionOfType(IllegalArgumentException.class)
+                    .as("a transient entity has nothing to delete, and must not be silently inserted then removed")
+                    .isThrownBy(() -> repository.delete(transientCoffee))
+                    .withMessageContaining("transient");
+        });
+    }
+
+    private void testDeleteUnknownId() {
+        runInTransaction(entityManager -> {
+            CoffeeRepository repository = new CoffeeRepositoryJpa(entityManager);
+            CoffeeEntity ghost = coffee("Ghost", "Nowhere", Roast.DARK, "10.00", 5);
+            ghost.setId(-1L);
+
+            assertThatExceptionOfType(NoSuchElementException.class)
+                    .as("a detached entity whose row no longer exists must not be silently re-inserted then removed")
+                    .isThrownBy(() -> repository.delete(ghost))
+                    .withMessageContaining("No entity found with the identifier -1");
         });
     }
 

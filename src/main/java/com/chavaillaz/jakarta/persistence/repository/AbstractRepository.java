@@ -516,8 +516,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
 
     @Override
     public void delete(E entity) {
-        // A detached entity must first be re-attached, otherwise the removal is silently ignored
-        entityManager.remove(entityManager.contains(entity) ? entity : entityManager.merge(entity));
+        entityManager.remove(reattach(entity));
     }
 
 }

@@ -192,7 +192,8 @@ public interface Repository<E extends Identifiable<I>, I> {
      * A detached entity is re-attached beforehand, the lock then applying to the managed copy.
      *
      * @param entity The entity to lock
-     * @throws NoSuchElementException if the entity is detached and no entity with its identifier exists
+     * @throws IllegalArgumentException if the entity is transient, having no identifier yet
+     * @throws NoSuchElementException   if the entity is detached and no entity with its identifier exists
      */
     void lock(E entity);
 
@@ -245,8 +246,13 @@ public interface Repository<E extends Identifiable<I>, I> {
 
     /**
      * Deletes the given entity.
+     * <p>
+     * A detached entity is re-attached beforehand, with a fresh lookup rather than a merge, so that deleting it
+     * cannot silently persist local field edits carried by a stale detached copy first.
      *
      * @param entity The entity to delete
+     * @throws IllegalArgumentException if the entity is transient, having no identifier yet
+     * @throws NoSuchElementException   if the entity is detached and no entity with its identifier exists
      */
     void delete(E entity);
 
