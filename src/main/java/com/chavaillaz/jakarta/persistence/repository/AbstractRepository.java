@@ -464,15 +464,25 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      *
      * @param entity The entity to re-attach
      * @return The managed copy of the entity
-     * @throws NoSuchElementException if the entity is detached and no entity with its identifier exists
+     * @throws IllegalArgumentException if the entity is transient, having no identifier yet
+     * @throws NoSuchElementException   if the entity is detached and no entity with its identifier exists
      */
     protected E reattach(E entity) {
         if (entityManager.contains(entity)) {
             return entity;
         }
-        E managedEntity = entityManager.find(entityType, entity.getId());
+
+        I id = entity.getId();
+        if (id == null) {
+            // A transient entity was never persisted, so there is nothing to look up nor a managed copy to return;
+            // letting it fall through to entityManager.find(entityType, null) would instead surface a confusing
+            // provider level IllegalArgumentException about the identifier itself, not about the entity's state
+            throw new IllegalArgumentException("Cannot reattach a transient entity in %s".formatted(getClass().getSimpleName()));
+        }
+
+        E managedEntity = entityManager.find(entityType, id);
         if (managedEntity == null) {
-            throw new NoSuchElementException("No entity found with the identifier %s in %s".formatted(entity.getId(), getClass().getSimpleName()));
+            throw new NoSuchElementException("No entity found with the identifier %s in %s".formatted(id, getClass().getSimpleName()));
         }
         return managedEntity;
     }

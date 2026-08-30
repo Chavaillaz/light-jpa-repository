@@ -52,6 +52,7 @@ class CoffeeRepositoryTest extends HibernateTest {
         testLockAttached(identifier);
         testLockDetached(identifier);
         testLockUnknownId();
+        testLockTransient();
         testCustomFind();
         testCustomFindWithCriteria();
         testCombinedCriteria();
@@ -230,6 +231,19 @@ class CoffeeRepositoryTest extends HibernateTest {
             assertThatExceptionOfType(NoSuchElementException.class)
                     .isThrownBy(() -> repository.lock(ghost))
                     .withMessageContaining("No entity found with the identifier -1")
+                    .withMessageContaining(CoffeeRepositoryJpa.class.getSimpleName());
+        });
+    }
+
+    private void testLockTransient() {
+        runInTransaction(entityManager -> {
+            CoffeeRepository repository = new CoffeeRepositoryJpa(entityManager);
+            CoffeeEntity transientCoffee = coffee("Unsaved", "Nowhere", Roast.LIGHT, "1.00", 1);
+
+            assertThatExceptionOfType(IllegalArgumentException.class)
+                    .as("a transient entity has no identifier to look it up with")
+                    .isThrownBy(() -> repository.lock(transientCoffee))
+                    .withMessageContaining("transient")
                     .withMessageContaining(CoffeeRepositoryJpa.class.getSimpleName());
         });
     }
