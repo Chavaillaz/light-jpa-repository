@@ -3,6 +3,7 @@ package com.chavaillaz.jakarta.persistence.repository;
 import static com.chavaillaz.jakarta.persistence.repository.Pageable.sortedBy;
 import static com.chavaillaz.jakarta.persistence.repository.Pageable.unpaged;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -111,6 +112,14 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @return {@code true} if an entity exists for the given identifier, {@code false} otherwise
      */
     boolean existsById(@Nullable I id);
+
+    /**
+     * Gets the entities matching the given identifiers, silently skipping the ones that do not exist.
+     *
+     * @param ids The entity identifiers to look up
+     * @return The matching entities, in no particular order, at most one per given identifier
+     */
+    List<E> findAllById(Collection<I> ids);
 
     /**
      * Counts all the entities of the current repository.

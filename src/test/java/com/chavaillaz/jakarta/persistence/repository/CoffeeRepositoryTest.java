@@ -45,6 +45,7 @@ class CoffeeRepositoryTest extends HibernateTest {
         testGetByUnknownId();
         testGetByNullId();
         testExistsById(identifier);
+        testFindAllById(identifier);
         testUpdate(identifier);
         testGetReference(identifier);
         testCount();
@@ -133,6 +134,17 @@ class CoffeeRepositoryTest extends HibernateTest {
             assertThat(repository.existsById(identifier.longValue())).isTrue();
             assertThat(repository.existsById(-1L)).isFalse();
             assertThat(repository.existsById(null)).as("a null identifier must not reach the entity manager").isFalse();
+        });
+    }
+
+    private void testFindAllById(MutableLong identifier) {
+        runInTransaction(entityManager -> {
+            CoffeeRepository repository = new CoffeeRepositoryJpa(entityManager);
+
+            assertThat(namesOf(repository.findAllById(List.of(identifier.longValue(), -1L, identifier.longValue()))))
+                    .as("an unknown or duplicated identifier is silently skipped")
+                    .containsExactly(YIRGACHEFFE);
+            assertThat(repository.findAllById(List.of())).isEmpty();
         });
     }
 

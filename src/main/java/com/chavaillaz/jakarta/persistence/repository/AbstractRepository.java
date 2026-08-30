@@ -13,9 +13,11 @@ import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.transaction.Transactional;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Optional;
 
 import org.hibernate.query.restriction.Restriction;
@@ -154,6 +156,27 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
 
         // A plain list is used rather than getSingleResult(), which would throw when no row matches
         return !entityManager.createQuery(query).setMaxResults(1).getResultList().isEmpty();
+    }
+
+    @Override
+    public List<E> findAllById(Collection<I> ids) {
+        List<I> distinctIds = ids.stream().filter(Objects::nonNull).distinct().toList();
+        if (distinctIds.isEmpty()) {
+            return List.of();
+        }
+
+        Optional<String> idAttribute = singleIdAttributeName();
+        if (idAttribute.isEmpty()) {
+            // A composite identifier declared with an identifier class cannot be expressed as a single IN predicate
+            return distinctIds.stream().map(id -> entityManager.find(entityType, id)).filter(Objects::nonNull).toList();
+        }
+
+        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+        CriteriaQuery<E> query = criteriaBuilder.createQuery(entityType);
+        Root<E> root = query.from(entityType);
+        query.select(root).where(root.get(idAttribute.get()).in(distinctIds));
+
+        return entityManager.createQuery(query).getResultList();
     }
 
     /**
