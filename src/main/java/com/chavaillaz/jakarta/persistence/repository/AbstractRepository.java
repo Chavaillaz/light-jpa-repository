@@ -2,11 +2,11 @@ package com.chavaillaz.jakarta.persistence.repository;
 
 import static com.chavaillaz.jakarta.persistence.repository.Pageable.sortedBy;
 import static com.chavaillaz.jakarta.persistence.repository.Pageable.unpaged;
-import static jakarta.persistence.LockModeType.PESSIMISTIC_WRITE;
 import static jakarta.transaction.Transactional.TxType.MANDATORY;
 import static org.hibernate.query.restriction.Restriction.unrestricted;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Order;
@@ -147,6 +147,11 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     @Override
     public Optional<E> findById(@Nullable I id) {
         return Optional.ofNullable(id).map(identifier -> entityManager.find(entityType, identifier));
+    }
+
+    @Override
+    public Optional<E> findById(@Nullable I id, LockModeType lockMode) {
+        return Optional.ofNullable(id).map(identifier -> entityManager.find(entityType, identifier, lockMode));
     }
 
     @Override
@@ -566,6 +571,26 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     }
 
     /**
+     * Gets the first entity matching the given restriction and additional criteria, following the requested
+     * ordering, holding the requested lock on its row.
+     * <p>
+     * This is what claiming the next row to process is written with: the ordering makes the choice
+     * deterministic, and the lock is taken as the row is read, so that a concurrent transaction ordering on the
+     * very same criteria does not claim it as well.
+     *
+     * @param restriction The restriction to apply, or {@code null}
+     * @param criteria    The additional criteria to apply, or {@code null}
+     * @param sort        The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
+     * @param lockMode    The lock to hold on the row until the end of the transaction,
+     *                    {@link LockModeType#NONE} to take none
+     * @return The corresponding entity, or {@link Optional#empty()} if none matches
+     * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
+     */
+    protected Optional<E> first(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort, LockModeType lockMode) {
+        return queries().first(restriction, criteria, sort, lockMode);
+    }
+
+    /**
      * Gets the first entity matching the given criteria only, following the default ordering of the repository.
      *
      * @param criteria The criteria to apply, or {@code null} to match all the entities
@@ -649,10 +674,10 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     }
 
     @Override
-    public void lock(E entity) {
+    public void lock(E entity, LockModeType lockMode) {
         E managedEntity = reattach(entity);
         // Refresh to get last state of the entity if being already locked and changed
-        entityManager.refresh(managedEntity, PESSIMISTIC_WRITE);
+        entityManager.refresh(managedEntity, lockMode);
     }
 
     /**

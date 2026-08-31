@@ -4,6 +4,7 @@ import static com.chavaillaz.jakarta.persistence.repository.Pageables.toPage;
 import static org.hibernate.query.restriction.Restriction.unrestricted;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaDelete;
 import jakarta.persistence.criteria.CriteriaQuery;
@@ -274,8 +275,29 @@ public class EntityQueries<E> {
      * @see #createQuery(Restriction, Criteria, Sort)
      */
     public Optional<E> first(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort) {
+        return first(restriction, criteria, sort, LockModeType.NONE);
+    }
+
+    /**
+     * Gets the first entity matching the given restriction and additional criteria, following the requested
+     * ordering, holding the requested lock on its row.
+     * <p>
+     * This is what claiming the next row to process is written with: the ordering makes the choice
+     * deterministic, and the lock is taken as the row is read, so that a concurrent transaction ordering on the
+     * very same criteria does not claim it as well.
+     *
+     * @param restriction The restriction to apply, or {@code null}
+     * @param criteria    The additional criteria to apply, or {@code null}
+     * @param sort        The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
+     * @param lockMode    The lock to hold on the row until the end of the transaction,
+     *                    {@link LockModeType#NONE} to take none
+     * @return The corresponding entity, or {@link Optional#empty()} if none matches
+     * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
+     */
+    public Optional<E> first(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort, LockModeType lockMode) {
         // A plain list is used rather than getResultStream(), which the caller would have to close explicitly
         return createQuery(restriction, criteria, sort)
+                .setLockMode(lockMode)
                 .setMaxResults(1)
                 .getResultList()
                 .stream()

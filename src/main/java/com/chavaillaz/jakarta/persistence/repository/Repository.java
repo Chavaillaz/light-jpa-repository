@@ -3,6 +3,7 @@ package com.chavaillaz.jakarta.persistence.repository;
 import static com.chavaillaz.jakarta.persistence.repository.Pageable.sortedBy;
 import static com.chavaillaz.jakarta.persistence.repository.Pageable.unpaged;
 
+import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -104,6 +105,38 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @return The corresponding entity, or {@link Optional#empty()} if it does not exist
      */
     Optional<E> findById(@Nullable I id);
+
+    /**
+     * Gets the entity from its identifier, holding the requested lock on its row.
+     * <p>
+     * The row is locked as it is read, which is what a read-modify-write needs: with
+     * {@link LockModeType#PESSIMISTIC_WRITE}, a concurrent transaction reaching the same row waits until this one
+     * ends, instead of overwriting the change afterwards.
+     * <p>
+     * The lock only guarantees the freshness of the state when the entity is not already managed by the
+     * persistence context: when it is, the provider locks the row but keeps the copy it already holds, which may
+     * predate a change another transaction has since committed. Use {@link #lock(Identifiable, LockModeType)} to
+     * lock and refresh such an entity.
+     *
+     * @param id       The entity identifier, {@code null} never matching any entity
+     * @param lockMode The lock to hold on the row until the end of the transaction
+     * @return The corresponding entity, or {@link Optional#empty()} if it does not exist
+     */
+    Optional<E> findById(@Nullable I id, LockModeType lockMode);
+
+    /**
+     * Gets the entity from its identifier, holding the requested lock on its row, and throwing instead of
+     * returning an empty result when it does not exist.
+     *
+     * @param id       The entity identifier
+     * @param lockMode The lock to hold on the row until the end of the transaction
+     * @return The corresponding entity, never {@code null}
+     * @throws NoSuchElementException if the entity corresponding to the given identifier does not exist
+     * @see #findById(Object, LockModeType)
+     */
+    default E getById(I id, LockModeType lockMode) {
+        return findById(id, lockMode).orElseThrow(() -> new NoSuchElementException("No entity found with the identifier %s in %s".formatted(id, getClass().getSimpleName())));
+    }
 
     /**
      * Checks whether an entity exists for the given identifier, without fetching its state.
@@ -217,7 +250,25 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @throws IllegalArgumentException if the entity is transient, having no identifier yet
      * @throws NoSuchElementException   if the entity is detached and no entity with its identifier exists
      */
-    void lock(E entity);
+    default void lock(E entity) {
+        lock(entity, LockModeType.PESSIMISTIC_WRITE);
+    }
+
+    /**
+     * Configures the requested lock on an entity, its state being first refreshed from the database so that any
+     * concurrent change is taken into account. Any local change is therefore discarded.
+     * <p>
+     * A detached entity is re-attached beforehand, the lock then applying to the managed copy.
+     * <p>
+     * Unlike {@link #findById(Object, LockModeType)}, the state is always refreshed, so an entity the persistence
+     * context already holds cannot be locked on a stale copy.
+     *
+     * @param entity   The entity to lock
+     * @param lockMode The lock to hold on the row until the end of the transaction
+     * @throws IllegalArgumentException if the entity is transient, having no identifier yet
+     * @throws NoSuchElementException   if the entity is detached and no entity with its identifier exists
+     */
+    void lock(E entity, LockModeType lockMode);
 
     /**
      * Refreshes the state of an entity from the database, overwriting any local changes.

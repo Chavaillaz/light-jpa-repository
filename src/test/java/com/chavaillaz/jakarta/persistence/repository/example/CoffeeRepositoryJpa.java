@@ -1,5 +1,6 @@
 package com.chavaillaz.jakarta.persistence.repository.example;
 
+import static jakarta.persistence.LockModeType.PESSIMISTIC_WRITE;
 import static org.hibernate.query.restriction.Restriction.equal;
 import static org.hibernate.query.restriction.Restriction.greaterThan;
 
@@ -113,6 +114,15 @@ public class CoffeeRepositoryJpa extends AbstractRepository<CoffeeEntity, Long> 
     @Override
     public List<TastingNoteEntity> findNotesOf(CoffeeEntity coffee) {
         return search(TastingNoteEntity.class, equal(TastingNoteEntity_.coffee, coffee));
+    }
+
+    /**
+     * The queue pattern: the strongest matching coffee is claimed under a write lock, so that a concurrent
+     * transaction ordering on the very same criteria cannot claim it as well.
+     */
+    @Override
+    public Optional<CoffeeEntity> claimStrongest(int strength) {
+        return first(greaterThan(CoffeeEntity_.strength, strength), null, Sort.of(SortCriterion.desc(CoffeeEntity_.strength)), PESSIMISTIC_WRITE);
     }
 
     @Override

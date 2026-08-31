@@ -371,11 +371,32 @@ persistence context, not only the saved ones, so call it from a method that hold
 ## Locking
 
 `lock` re-attaches a detached entity and refreshes its state under a pessimistic write lock, so that any concurrent
-change is taken into account:
+change is taken into account. Pass a `LockModeType` to hold another one:
 
 ```java
 CoffeeEntity coffee = coffeeRepository.getById(id);
 coffeeRepository.lock(coffee);
+coffeeRepository.lock(coffee, LockModeType.PESSIMISTIC_READ);
+```
+
+A row can also be locked as it is read, which is what a read-modify-write needs:
+
+```java
+CoffeeEntity coffee = coffeeRepository.getById(id, LockModeType.PESSIMISTIC_WRITE);
+```
+
+Beware that a lock taken at read time only guarantees the freshness of the state when the entity is not already
+managed: when it is, the provider locks the row but keeps the copy it already holds, which may predate a change
+another transaction has since committed. That is exactly what `lock` refreshes for.
+
+Inside a repository, `first` takes a lock mode too, which is how the next row to process is claimed — the ordering
+makes the choice deterministic, and the lock stops a concurrent transaction from claiming the very same row:
+
+```java
+protected Optional<CoffeeEntity> claimStrongest(int strength) {
+    return first(Restriction.greaterThan(CoffeeEntity_.strength, strength), null,
+            Sort.of(SortCriterion.desc(CoffeeEntity_.strength)), LockModeType.PESSIMISTIC_WRITE);
+}
 ```
 
 ## Contributing
