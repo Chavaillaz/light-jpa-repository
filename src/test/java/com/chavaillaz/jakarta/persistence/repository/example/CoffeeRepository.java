@@ -2,6 +2,7 @@ package com.chavaillaz.jakarta.persistence.repository.example;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import com.chavaillaz.jakarta.persistence.repository.Cursor;
 import com.chavaillaz.jakarta.persistence.repository.CursorResult;
@@ -30,6 +31,10 @@ public interface CoffeeRepository extends Repository<CoffeeEntity, Long> {
     CursorResult<CoffeeEntity> scrollByRoast(Roast roast, Cursor cursor);
 
     List<TastingNoteEntity> findNotesOf(CoffeeEntity coffee);
+
+    Stream<CoffeeEntity> streamFromOrigin(String origin, Sort sort, int pageSize);
+
+    Stream<CoffeeEntity> streamTasting(String flavour, Sort sort, int pageSize);
 
     Optional<CoffeeEntity> claimStrongest(int strength);
 

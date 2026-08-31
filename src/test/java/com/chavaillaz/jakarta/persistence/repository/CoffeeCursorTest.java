@@ -2,6 +2,7 @@ package com.chavaillaz.jakarta.persistence.repository;
 
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.BLUE_MOUNTAIN;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.BOURBON_POINTU;
+import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.ETHIOPIA;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.GEISHA;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.HARRAR;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.KONA;
@@ -98,6 +99,38 @@ class CoffeeCursorTest extends HibernateTest {
         assertThat(names).containsExactly(BLUE_MOUNTAIN, BOURBON_POINTU, GEISHA);
         assertThat(statistics().getPrepareStatementCount())
                 .as("the third item is on the second page of two, the third page was never fetched")
+                .isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("streams the entities matching a restriction, one page at a time")
+    void streamsARestrictedSet() {
+        List<String> names = withRepository(repository ->
+                repository.streamFromOrigin(ETHIOPIA, Sort.NONE, 2).map(CoffeeEntity::getName).toList());
+
+        assertThat(names).containsExactly(HARRAR, SIDAMO, YIRGACHEFFE);
+    }
+
+    @Test
+    @DisplayName("streams the entities matching a criteria, one page at a time")
+    void streamsACriteriaSet() {
+        List<String> names = withRepository(repository ->
+                repository.streamTasting("citrus", Sort.NONE, 2).map(CoffeeEntity::getName).toList());
+
+        assertThat(names).containsExactly(GEISHA, SIDAMO, YIRGACHEFFE);
+    }
+
+    @Test
+    @DisplayName("fetches only the pages a short circuiting operation needs, on a restricted stream too")
+    void streamsARestrictedSetLazily() {
+        statistics().clear();
+
+        List<String> names = withRepository(repository ->
+                repository.streamFromOrigin(ETHIOPIA, Sort.NONE, 1).limit(2).map(CoffeeEntity::getName).toList());
+
+        assertThat(names).containsExactly(HARRAR, SIDAMO);
+        assertThat(statistics().getPrepareStatementCount())
+                .as("two pages of one, the third was never fetched")
                 .isEqualTo(2);
     }
 

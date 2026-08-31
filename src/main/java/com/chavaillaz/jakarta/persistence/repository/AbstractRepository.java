@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import org.hibernate.query.restriction.Restriction;
 import org.jspecify.annotations.Nullable;
@@ -410,6 +411,68 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      */
     protected CursorResult<E> scroll(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Cursor cursor) {
         return queries().scroll(restriction, criteria, cursor);
+    }
+
+    /**
+     * Lazily walks the entities matching the given restriction, fetching a page at a time through the cursor
+     * pagination instead of loading the whole result set at once.
+     *
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
+     *                    the entities
+     * @param sort        The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
+     * @param pageSize    The number of items fetched per underlying page, capped to {@link Cursor#MAX_SIZE}
+     * @return The lazy stream of every matching entity, in the requested ordering
+     * @see #stream(Restriction, Criteria, Sort, int)
+     */
+    protected Stream<E> stream(@Nullable Restriction<? super E> restriction, Sort sort, int pageSize) {
+        return stream(restriction, null, sort, pageSize);
+    }
+
+    /**
+     * Lazily walks the entities matching the given restriction, applying {@link Cursor#DEFAULT_SIZE}.
+     *
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
+     *                    the entities
+     * @param sort        The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
+     * @return The lazy stream of every matching entity, in the requested ordering
+     * @see #stream(Restriction, Criteria, Sort, int)
+     */
+    protected Stream<E> stream(@Nullable Restriction<? super E> restriction, Sort sort) {
+        return stream(restriction, null, sort, Cursor.DEFAULT_SIZE);
+    }
+
+    /**
+     * Lazily walks the entities matching the given criteria only.
+     *
+     * @param criteria The criteria to apply, or {@code null} to match all the entities
+     * @param sort     The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
+     * @param pageSize The number of items fetched per underlying page, capped to {@link Cursor#MAX_SIZE}
+     * @return The lazy stream of every matching entity, in the requested ordering
+     * @see #stream(Restriction, Criteria, Sort, int)
+     */
+    protected Stream<E> stream(@Nullable Criteria<E> criteria, Sort sort, int pageSize) {
+        return stream(null, criteria, sort, pageSize);
+    }
+
+    /**
+     * Lazily walks the entities matching the given restriction and additional criteria, fetching a page at a time
+     * through the cursor pagination instead of loading the whole result set at once.
+     * <p>
+     * This is the filtered counterpart of {@link #streamAll(Sort, int)}, and it carries the very same
+     * constraints: the pages are fetched on demand, so a short-circuiting operation only fetches what it needs,
+     * but the stream must be consumed within the transaction it was obtained from, and every entity walked stays
+     * managed by the persistence context until that transaction ends.
+     *
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
+     *                    the entities
+     * @param criteria    The additional criteria to apply, or {@code null}
+     * @param sort        The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
+     * @param pageSize    The number of items fetched per underlying page, capped to {@link Cursor#MAX_SIZE}
+     * @return The lazy stream of every matching entity, in the requested ordering
+     * @throws IllegalArgumentException if the ordering is not usable as a cursor key
+     */
+    protected Stream<E> stream(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort, int pageSize) {
+        return Cursors.stream(cursor -> queries().scroll(restriction, criteria, cursor), sort, pageSize);
     }
 
     @Override

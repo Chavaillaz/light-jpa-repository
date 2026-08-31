@@ -314,6 +314,15 @@ Only the fetching is lazy, not the retention: every entity walked stays managed 
 walking a whole large table still grows the heap the way loading it at once would. When the point is to avoid
 holding the rows in memory, clear the persistence context periodically or walk the table with a stateless session.
 
+Inside a repository, `stream` is the filtered counterpart, walking only the entities matching a restriction or a
+criteria, with the very same laziness and the very same constraints:
+
+```java
+public Stream<CoffeeEntity> streamFromOrigin(String origin, Sort sort, int pageSize) {
+    return stream(Restriction.equal(CoffeeEntity_.origin, origin), sort, pageSize);
+}
+```
+
 ## Filtering
 
 A `Restriction`, from `org.hibernate.query.restriction`, is checked at compile time against the JPA static

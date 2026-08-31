@@ -7,7 +7,6 @@ import jakarta.persistence.LockModeType;
 import java.util.Collection;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -213,9 +212,7 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @see #findAll(Cursor)
      */
     default Stream<E> streamAll(Sort sort, int pageSize) {
-        CursorResult<E> first = findAll(Cursor.first(pageSize, sort));
-        return Stream.iterate(first, Objects::nonNull, page -> page.hasNext() ? findAll(Cursor.of(page.next(), pageSize, sort)) : null)
-                .flatMap(page -> page.items().stream());
+        return Cursors.stream(this::findAll, sort, pageSize);
     }
 
     /**

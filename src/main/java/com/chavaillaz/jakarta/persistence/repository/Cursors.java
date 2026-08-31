@@ -5,6 +5,9 @@ import static java.util.Objects.requireNonNull;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Stream;
 
 import org.jspecify.annotations.Nullable;
 
@@ -109,6 +112,27 @@ public final class Cursors {
                 hasPrevious ? token(codec, items.getFirst(), resolvedSort, true, fingerprint, keyCodec) : null,
                 hasNext,
                 hasPrevious);
+    }
+
+    /**
+     * Lazily walks every entity a cursor query returns, fetching a page at a time instead of loading the whole
+     * result set at once.
+     * <p>
+     * The pages are fetched on demand as the stream is consumed, so a short-circuiting operation such as
+     * {@link Stream#limit(long)} or {@link Stream#findFirst()} fetches only the pages it actually needs. Only the
+     * fetching is lazy though, not the retention: the entities walked stay managed by the persistence context
+     * until the transaction ends, and the stream must be consumed within that very same transaction.
+     *
+     * @param <T>      The type of the returned items
+     * @param pages    The page fetcher, which is the cursor query being walked
+     * @param sort     The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
+     * @param pageSize The number of items fetched per underlying page, capped to {@link Cursor#MAX_SIZE}
+     * @return The lazy stream of every matching item, in the requested ordering
+     */
+    public static <T> Stream<T> stream(Function<Cursor, CursorResult<T>> pages, Sort sort, int pageSize) {
+        CursorResult<T> first = pages.apply(Cursor.first(pageSize, sort));
+        return Stream.iterate(first, Objects::nonNull, page -> page.hasNext() ? pages.apply(Cursor.of(page.next(), pageSize, sort)) : null)
+                .flatMap(page -> page.items().stream());
     }
 
     /**

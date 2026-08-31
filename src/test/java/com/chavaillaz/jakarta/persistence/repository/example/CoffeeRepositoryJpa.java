@@ -12,6 +12,7 @@ import jakarta.persistence.criteria.Root;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 import org.jspecify.annotations.NullMarked;
 
@@ -114,6 +115,16 @@ public class CoffeeRepositoryJpa extends AbstractRepository<CoffeeEntity, Long> 
     @Override
     public List<TastingNoteEntity> findNotesOf(CoffeeEntity coffee) {
         return search(TastingNoteEntity.class, equal(TastingNoteEntity_.coffee, coffee));
+    }
+
+    @Override
+    public Stream<CoffeeEntity> streamFromOrigin(String origin, Sort sort, int pageSize) {
+        return stream(equal(CoffeeEntity_.origin, origin), sort, pageSize);
+    }
+
+    @Override
+    public Stream<CoffeeEntity> streamTasting(String flavour, Sort sort, int pageSize) {
+        return stream(tasting(flavour), sort, pageSize);
     }
 
     /**
