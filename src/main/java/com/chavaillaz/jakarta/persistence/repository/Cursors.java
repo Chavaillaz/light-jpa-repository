@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import org.jspecify.annotations.Nullable;
@@ -84,12 +85,40 @@ public final class Cursors {
      * @return The corresponding page, with the tokens of the surrounding ones
      */
     public static <T> CursorResult<T> toResult(CursorCodec codec, List<T> fetched, Cursor cursor, Sort resolvedSort, @Nullable CursorPosition position, CursorKeyCodec keyCodec) {
+        // The keys are read lazily, so that only the boundary rows of the page are actually reflected upon
+        List<Supplier<List<String>>> keys = fetched.stream()
+                .<Supplier<List<String>>>map(item -> () -> Keysets.valuesOf(item, resolvedSort, keyCodec))
+                .toList();
+        return toResult(codec, fetched, keys, cursor, resolvedSort, position);
+    }
+
+    /**
+     * Builds the resulting page from the fetched rows and from the ordering keys the query itself returned.
+     * <p>
+     * Reading the keys back from the entity is only a fallback: the {@code order by} clause compares the value
+     * the database holds, whereas an entity exposes the value its accessor returns, and nothing guarantees the
+     * two are the same. Selecting the keys alongside the entity keeps the token and the seek predicate expressed
+     * in the very same terms.
+     *
+     * @param <T>          The type of the returned items
+     * @param codec        The codec to encode the surrounding tokens with
+     * @param fetched      The fetched rows, one more than the requested size when another page exists
+     * @param keys         The textual ordering keys of each fetched row, in the same order
+     * @param cursor       The requested position, size and ordering
+     * @param resolvedSort The resolved ordering the tokens are issued for
+     * @param position     The requested position, or {@code null} for the first page
+     * @return The corresponding page, with the tokens of the surrounding ones
+     */
+    public static <T> CursorResult<T> toResult(CursorCodec codec, List<T> fetched, List<Supplier<List<String>>> keys, Cursor cursor, Sort resolvedSort, @Nullable CursorPosition position) {
         boolean backward = isBackward(position);
         boolean hasMore = fetched.size() > cursor.size();
+        int size = hasMore ? cursor.size() : fetched.size();
 
-        List<T> items = new ArrayList<>(hasMore ? fetched.subList(0, cursor.size()) : fetched);
+        List<T> items = new ArrayList<>(fetched.subList(0, size));
+        List<Supplier<List<String>>> boundaries = new ArrayList<>(keys.subList(0, size));
         if (backward) {
             Collections.reverse(items);
+            Collections.reverse(boundaries);
         }
         if (items.isEmpty()) {
             // Walking backwards onto an empty page, the rows we came from having been deleted in between, the
@@ -108,8 +137,8 @@ public final class Cursors {
         return new CursorResult<>(
                 items,
                 cursor.size(),
-                hasNext ? token(codec, items.getLast(), resolvedSort, false, fingerprint, keyCodec) : null,
-                hasPrevious ? token(codec, items.getFirst(), resolvedSort, true, fingerprint, keyCodec) : null,
+                hasNext ? token(codec, boundaries.getLast().get(), false, fingerprint) : null,
+                hasPrevious ? token(codec, boundaries.getFirst().get(), true, fingerprint) : null,
                 hasNext,
                 hasPrevious);
     }
@@ -158,8 +187,8 @@ public final class Cursors {
         return codec.encode(new CursorPosition(requireNonNull(position).values(), false, fingerprint(resolvedSort)));
     }
 
-    private static <T> String token(CursorCodec codec, T entity, Sort sort, boolean backward, String fingerprint, CursorKeyCodec keyCodec) {
-        return codec.encode(new CursorPosition(Keysets.valuesOf(entity, sort, keyCodec), backward, fingerprint));
+    private static String token(CursorCodec codec, List<String> keys, boolean backward, String fingerprint) {
+        return codec.encode(new CursorPosition(keys, backward, fingerprint));
     }
 
 }

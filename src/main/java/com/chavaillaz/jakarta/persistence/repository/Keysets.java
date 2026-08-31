@@ -109,6 +109,10 @@ public final class Keysets {
 
     /**
      * Reads the ordering keys of the given entity, which become the position of the cursor.
+     * <p>
+     * This is the fallback of the cursor queries, which select the keys alongside the entity so that the token
+     * carries the values the database ordered on: an accessor is free to return something else than the column
+     * it maps, and the seek predicate would then be expressed in terms the {@code order by} clause never used.
      *
      * @param entity The entity of the boundary row of the page
      * @param sort   The resolved ordering

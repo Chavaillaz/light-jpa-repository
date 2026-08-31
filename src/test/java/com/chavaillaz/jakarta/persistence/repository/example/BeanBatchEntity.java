@@ -7,6 +7,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import java.io.Serializable;
 import java.time.LocalDate;
+import java.util.Locale;
 
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
@@ -29,6 +30,17 @@ public class BeanBatchEntity implements Identifiable<BeanBatchEntity.BatchId> {
     private LocalDate roastedOn;
 
     private int kilograms;
+
+    @Column(name = "label", length = 20)
+    private @Nullable String label;
+
+    /**
+     * Deliberately divergent from the column it maps: the accessor trims and upper cases what the database
+     * holds, so an ordering key read from the entity is not the value the {@code order by} clause compares.
+     */
+    public @Nullable String getLabel() {
+        return label == null ? null : label.trim().toUpperCase(Locale.ROOT);
+    }
 
     @Embeddable
     @Getter

@@ -5,6 +5,7 @@ import static org.hibernate.query.restriction.Restriction.unrestricted;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.Tuple;
 import jakarta.persistence.criteria.CommonAbstractCriteria;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaDelete;
@@ -12,9 +13,12 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.From;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Selection;
 import jakarta.persistence.criteria.Subquery;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import org.hibernate.query.SelectionQuery;
 import org.hibernate.query.restriction.Restriction;
@@ -392,27 +396,80 @@ public class EntityQueries<E> {
         Sort resolvedSort = ordering.resolveSort(cursor.sort());
         CursorPosition position = Cursors.position(cursorCodec, cursor, resolvedSort);
         Sort direction = Cursors.direction(resolvedSort, position);
+        List<String> keyProperties = resolvedSort.criteria().stream().map(SortCriterion::property).toList();
 
-        boolean semiJoined = joinsCollection(restriction, criteria);
+        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Tuple> query = criteriaBuilder.createTupleQuery();
+        Root<E> root = query.from(entityType);
 
-        List<E> fetched = SelectionSpecification.create(entityType)
-                .restrict(restriction == null || semiJoined ? unrestricted() : restriction)
-                .augment((criteriaBuilder, query, root) -> {
-                    if (semiJoined) {
-                        restrict(criteriaBuilder, query, semiJoin(criteriaBuilder, query, root, restriction, criteria));
-                    } else if (criteria != null) {
-                        restrict(criteriaBuilder, query, criteria.toPredicate(criteriaBuilder, query, root));
-                    }
-                    if (position != null) {
-                        restrict(criteriaBuilder, query, Keysets.seek(criteriaBuilder, root, direction, position.values(), cursorKeyCodec));
-                    }
-                    query.orderBy(Keysets.toOrders(criteriaBuilder, root, direction));
-                })
-                .createQuery(entityManager)
+        Predicate predicate = null;
+        if (joinsCollection(restriction, criteria)) {
+            predicate = semiJoin(criteriaBuilder, query, root, restriction, criteria);
+        } else {
+            if (restriction != null) {
+                predicate = restriction.toPredicate(root, criteriaBuilder);
+            }
+            if (criteria != null) {
+                predicate = and(criteriaBuilder, predicate, criteria.toPredicate(criteriaBuilder, query, root));
+            }
+        }
+        if (position != null) {
+            predicate = and(criteriaBuilder, predicate, Keysets.seek(criteriaBuilder, root, direction, position.values(), cursorKeyCodec));
+        }
+        if (predicate != null) {
+            query.where(predicate);
+        }
+
+        // The entity is selected alongside the very columns the ordering compares, so that the keys travelling
+        // within the tokens are the values the database ordered on, and not what an accessor of the entity
+        // happens to return for them
+        List<Selection<?>> selections = new ArrayList<>();
+        selections.add(root);
+        keyProperties.forEach(property -> selections.add(Keysets.path(root, property)));
+        query.multiselect(selections);
+        query.orderBy(Keysets.toOrders(criteriaBuilder, root, direction));
+
+        List<Tuple> rows = entityManager.createQuery(query)
                 .setMaxResults(cursor.limit())
                 .getResultList();
 
-        return Cursors.toResult(cursorCodec, fetched, cursor, resolvedSort, position, cursorKeyCodec);
+        return Cursors.toResult(
+                cursorCodec,
+                rows.stream().map(row -> row.get(0, entityType)).toList(),
+                rows.stream().<Supplier<List<String>>>map(row -> () -> keysOf(row, keyProperties)).toList(),
+                cursor,
+                resolvedSort,
+                position);
+    }
+
+    /**
+     * Formats the ordering keys the query returned alongside an entity into their textual representation.
+     *
+     * @param row        The fetched row, whose first element is the entity and whose others are the keys
+     * @param properties The ordering properties, in the order they were selected in
+     * @return The textual keys, in the ordering order
+     * @throws IllegalArgumentException if one of the keys is {@code null}, a nullable attribute being unusable as
+     *                                  a cursor key since the databases do not agree on where the nulls sort
+     */
+    protected List<String> keysOf(Tuple row, List<String> properties) {
+        List<String> keys = new ArrayList<>(properties.size());
+        for (int index = 0; index < properties.size(); index++) {
+            // The entity occupies the first element, the keys following it in the ordering order
+            keys.add(cursorKeyCodec.format(properties.get(index), row.get(index + 1)));
+        }
+        return keys;
+    }
+
+    /**
+     * Combines two predicates, the first one being possibly absent.
+     *
+     * @param criteriaBuilder The builder to combine the predicates with
+     * @param existing        The predicate to combine with, or {@code null}
+     * @param predicate       The predicate to append
+     * @return The combined predicate
+     */
+    protected static Predicate and(CriteriaBuilder criteriaBuilder, @Nullable Predicate existing, Predicate predicate) {
+        return existing == null ? predicate : criteriaBuilder.and(existing, predicate);
     }
 
 }

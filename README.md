@@ -291,6 +291,10 @@ CursorResult<CoffeeEntity> first = coffeeRepository.findAll(Cursor.first(20, Sor
 CursorResult<CoffeeEntity> next = coffeeRepository.findAll(Cursor.of(first.next(), 20, Sort.parse("-price")));
 ```
 
+The ordering keys travelling within a token are selected alongside the entity, so they are the values the database
+ordered on and not what an accessor of the entity returns for them — the two are free to differ, and the seek
+predicate would then compare terms the `ORDER BY` never used.
+
 The `next` and `previous` tokens returned in a `CursorResult` are opaque: send them back as is to navigate, never
 build or parse them yourself. A token is bound to the ordering it was issued for and is rejected if replayed on
 another one. Every ordering key must be a non-nullable, non-collection attribute of a supported type (the primitive

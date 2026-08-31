@@ -3,6 +3,7 @@ package com.chavaillaz.jakarta.persistence.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeAll;
@@ -31,6 +32,9 @@ class BeanBatchCursorTest extends HibernateTest {
         batch.setId(new BatchId(roasterCode, batchNumber));
         batch.setRoastedOn(LocalDate.of(2024, 1, batchNumber));
         batch.setKilograms(10 * batchNumber);
+        // Stored padded and in lower case, whereas the accessor returns it trimmed and upper cased: the two
+        // therefore do not even sort the same way, every stored value starting with a space
+        batch.setLabel(" %s%d ".formatted(roasterCode.toLowerCase(), batchNumber));
         return batch;
     }
 
@@ -50,6 +54,10 @@ class BeanBatchCursorTest extends HibernateTest {
 
     private CursorResult<BeanBatchEntity> page(String token, int size) {
         return withRepository(BeanBatchRepositoryJpa.class, repository -> repository.findAll(Cursor.of(token, size, Sort.NONE)));
+    }
+
+    private CursorResult<BeanBatchEntity> labelled(String token) {
+        return withRepository(BeanBatchRepositoryJpa.class, repository -> repository.findAll(Cursor.of(token, 1, Sort.parse("label"))));
     }
 
     @Test
@@ -84,6 +92,28 @@ class BeanBatchCursorTest extends HibernateTest {
         CursorResult<BeanBatchEntity> back = page(second.previous(), 2);
 
         assertThat(idsOf(back)).containsExactlyElementsOf(idsOf(first));
+    }
+
+    @Test
+    @DisplayName("seeks on the value the database holds, not on the one the accessor of the entity returns")
+    void seeksOnTheStoredValue() {
+        // The label is stored padded and in lower case, and its accessor returns it trimmed and upper cased: a
+        // key read from the entity would be compared against a column no row of which even starts the same way,
+        // so the walk would stop after its first page instead of reaching the following ones
+        List<BatchId> visited = new ArrayList<>();
+        String token = null;
+        for (int page = 0; page < 5; page++) {
+            CursorResult<BeanBatchEntity> result = labelled(token);
+            visited.addAll(idsOf(result));
+            token = result.next();
+            if (token == null) {
+                break;
+            }
+        }
+
+        assertThat(visited).containsExactly(
+                new BatchId("KLD", 1), new BatchId("KLD", 2),
+                new BatchId("MKB", 1), new BatchId("MKB", 2));
     }
 
 }
