@@ -165,6 +165,20 @@ class CursorsTest {
         }
 
         @Test
+        @DisplayName("keeps a way forward when a backward walk lands on an emptied page")
+        void keepsAWayForwardFromAnEmptyBackwardPage() {
+            // The rows preceding the position were deleted in between: without a token, the consumer would be
+            // stranded on an empty page, unable to walk back to the one it came from
+            CursorResult<Bean> result = Cursors.toResult(
+                    CODEC, List.of(), Cursor.first(3, SORT), SORT, position(List.of("Robusta"), true), CursorKeyCodec.DEFAULT);
+
+            assertThat(result.items()).isEmpty();
+            assertThat(result.hasPrevious()).isFalse();
+            assertThat(result.hasNext()).isTrue();
+            assertThat(CODEC.decode(result.next())).isEqualTo(position(List.of("Robusta"), false));
+        }
+
+        @Test
         @DisplayName("issues tokens bound to the ordering, on the boundary rows")
         void issuesBoundTokens() {
             CursorResult<Bean> result =

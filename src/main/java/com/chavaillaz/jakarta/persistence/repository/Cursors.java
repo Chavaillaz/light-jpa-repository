@@ -1,5 +1,7 @@
 package com.chavaillaz.jakarta.persistence.repository;
 
+import static java.util.Objects.requireNonNull;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -87,7 +89,12 @@ public final class Cursors {
             Collections.reverse(items);
         }
         if (items.isEmpty()) {
-            return CursorResult.empty(cursor.size());
+            // Walking backwards onto an empty page, the rows we came from having been deleted in between, the
+            // consumer would otherwise be stranded with no token at all: the position it walked back from is
+            // re-issued forward, so that it can still reach whatever now follows it
+            return backward
+                    ? new CursorResult<>(List.of(), cursor.size(), forward(codec, position, resolvedSort), null, true, false)
+                    : CursorResult.empty(cursor.size());
         }
 
         // Walking backwards, a following page necessarily exists, since it is the one we come from
@@ -112,6 +119,19 @@ public final class Cursors {
      */
     public static String fingerprint(Sort sort) {
         return Integer.toHexString(sort.toString().hashCode());
+    }
+
+    /**
+     * Re-issues the given backward position as a forward one, its keys being the boundary of the page the
+     * consumer walked back from.
+     *
+     * @param codec        The codec to encode the token with
+     * @param position     The backward position to re-issue, never {@code null} when walking backwards
+     * @param resolvedSort The resolved ordering the token is issued for
+     * @return The corresponding forward token
+     */
+    private static String forward(CursorCodec codec, @Nullable CursorPosition position, Sort resolvedSort) {
+        return codec.encode(new CursorPosition(requireNonNull(position).values(), false, fingerprint(resolvedSort)));
     }
 
     private static <T> String token(CursorCodec codec, T entity, Sort sort, boolean backward, String fingerprint, CursorKeyCodec keyCodec) {
