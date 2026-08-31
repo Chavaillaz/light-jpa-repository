@@ -9,11 +9,14 @@ import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.metamodel.SingularAttribute;
+import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Field;
 import java.lang.reflect.InaccessibleObjectException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 import org.hibernate.Hibernate;
@@ -39,6 +42,20 @@ public final class Keysets {
      * one path per ordering key.
      */
     private static final Pattern NESTING_PATTERN = Pattern.compile(Pattern.quote(SortCriterion.NESTING_SEPARATOR));
+
+    /**
+     * Accessors of the cursor keys, resolved once per entity class and attribute rather than at every boundary
+     * row of every page. A {@link ClassValue} is used rather than a plain map keyed by the class, so that the
+     * cache cannot hold a class, and therefore its class loader, alive after a redeployment.
+     */
+    private static final ClassValue<Map<String, AccessibleObject>> ACCESSORS = new ClassValue<>() {
+
+        @Override
+        protected Map<String, AccessibleObject> computeValue(Class<?> type) {
+            return new ConcurrentHashMap<>();
+        }
+
+    };
 
     private Keysets() {
         // This utility class should not be instantiated
@@ -217,33 +234,55 @@ public final class Keysets {
     }
 
     private static @Nullable Object readAttribute(Object owner, String attribute) {
-        // Only the first and the last rows of a page are read, so the plain reflection stays negligible
+        AccessibleObject accessor = ACCESSORS.get(owner.getClass()).computeIfAbsent(attribute, name -> accessorOf(owner.getClass(), name));
+        try {
+            return accessor instanceof Method getter ? getter.invoke(owner) : ((Field) accessor).get(owner);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Cannot read the cursor key " + attribute, e);
+        }
+    }
+
+    /**
+     * Resolves the accessor of an attribute, the getter taking precedence over the field so that a computed or
+     * decorated one is honoured, walking the hierarchy up so that an inherited mapped superclass is covered.
+     * <p>
+     * The resolution is cached per entity class, since a cursor query reads the keys of both boundary rows of
+     * every page it walks, and {@code getDeclaredMethod} copies the whole method array of the class at each call.
+     *
+     * @param type      The type to resolve the accessor on
+     * @param attribute The name of the attribute to read
+     * @return The corresponding accessor, already made accessible
+     * @throws IllegalArgumentException if no accessor exists for the attribute
+     * @throws IllegalStateException    if an accessor exists but cannot be made accessible
+     */
+    private static AccessibleObject accessorOf(Class<?> type, String attribute) {
         String capitalized = Character.toUpperCase(attribute.charAt(0)) + attribute.substring(1);
-        for (Class<?> type = owner.getClass(); type != null; type = type.getSuperclass()) {
+        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
             for (String name : List.of("get" + capitalized, "is" + capitalized, attribute)) {
                 try {
-                    Method getter = type.getDeclaredMethod(name);
-                    getter.setAccessible(true);
-                    return getter.invoke(owner);
+                    return accessible(current.getDeclaredMethod(name), attribute);
                 } catch (NoSuchMethodException e) {
                     // Try the next candidate
-                } catch (ReflectiveOperationException | InaccessibleObjectException | SecurityException e) {
-                    // InaccessibleObjectException and SecurityException are unchecked and thrown by setAccessible
-                    // itself, not by the reflective call, so they do not extend ReflectiveOperationException
-                    throw new IllegalStateException("Cannot read the cursor key " + attribute, e);
                 }
             }
             try {
-                Field field = type.getDeclaredField(attribute);
-                field.setAccessible(true);
-                return field.get(owner);
+                return accessible(current.getDeclaredField(attribute), attribute);
             } catch (NoSuchFieldException e) {
                 // Try the superclass
-            } catch (ReflectiveOperationException | InaccessibleObjectException | SecurityException e) {
-                throw new IllegalStateException("Cannot read the cursor key " + attribute, e);
             }
         }
-        throw new IllegalArgumentException("Cannot read the cursor key " + attribute + " on " + owner.getClass());
+        throw new IllegalArgumentException("Cannot read the cursor key " + attribute + " on " + type);
+    }
+
+    private static <A extends AccessibleObject> A accessible(A accessor, String attribute) {
+        try {
+            accessor.setAccessible(true);
+            return accessor;
+        } catch (InaccessibleObjectException | SecurityException e) {
+            // Both are unchecked and thrown by setAccessible itself, not by the reflective call, so neither
+            // extends ReflectiveOperationException
+            throw new IllegalStateException("Cannot read the cursor key " + attribute, e);
+        }
     }
 
     /**
