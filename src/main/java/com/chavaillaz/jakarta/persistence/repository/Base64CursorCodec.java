@@ -64,9 +64,15 @@ public class Base64CursorCodec implements CursorCodec {
         try {
             String[] parts = decodeValue(token).split(Pattern.quote(SEPARATOR), -1);
             String header = parts[0];
+            char direction = header.charAt(0);
+            if (direction != FORWARD && direction != BACKWARD) {
+                // Anything else was not produced by this codec: a token whose direction is silently read as
+                // forward would seek the wrong way and return a page the consumer never asked for
+                throw new IllegalArgumentException("Unknown cursor direction " + direction);
+            }
             return new CursorPosition(
                     Arrays.stream(parts).skip(1).map(Base64CursorCodec::decodeValue).toList(),
-                    header.charAt(0) == BACKWARD,
+                    direction == BACKWARD,
                     header.substring(1));
         } catch (RuntimeException e) {
             throw new IllegalArgumentException("Malformed cursor", e);

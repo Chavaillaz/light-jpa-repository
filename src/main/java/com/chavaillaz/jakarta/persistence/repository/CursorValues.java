@@ -31,8 +31,8 @@ public final class CursorValues {
 
     private static final Map<Class<?>, Function<String, Object>> PARSERS = Map.ofEntries(
             Map.entry(String.class, value -> value),
-            Map.entry(Boolean.class, Boolean::valueOf),
-            Map.entry(Character.class, value -> value.charAt(0)),
+            Map.entry(Boolean.class, CursorValues::parseBoolean),
+            Map.entry(Character.class, CursorValues::parseCharacter),
             Map.entry(Byte.class, Byte::valueOf),
             Map.entry(Short.class, Short::valueOf),
             Map.entry(Integer.class, Integer::valueOf),
@@ -87,7 +87,7 @@ public final class CursorValues {
      * @param type  The Java type of the attribute, as reported by the metamodel
      * @return The corresponding value
      * @throws IllegalArgumentException if the type is not a supported cursor key type, or if the value is not a
-     *                                  constant of the requested enum type
+     *                                  valid representation of it, a token being untrusted consumer input
      */
     @SuppressWarnings("unchecked")
     public static <Y> Y parse(String value, Class<Y> type) {
@@ -102,7 +102,31 @@ public final class CursorValues {
         if (parser == null) {
             throw new IllegalArgumentException("Unsupported cursor key type " + type.getName());
         }
-        return (Y) parser.apply(value);
+
+        try {
+            return (Y) parser.apply(value);
+        } catch (RuntimeException e) {
+            // The value comes from a token an API consumer sent back, so it may be anything: whatever the
+            // underlying parser throws is surfaced as a malformed cursor, which the API layer answers with a
+            // 400 Bad Request, instead of leaking as an arbitrary runtime failure
+            throw new IllegalArgumentException("Invalid cursor key value %s for the type %s".formatted(value, type.getName()), e);
+        }
+    }
+
+    private static Boolean parseBoolean(String value) {
+        return switch (value) {
+            case "true" -> Boolean.TRUE;
+            case "false" -> Boolean.FALSE;
+            // Boolean#valueOf would silently read any other text as false, seeking on a value nothing issued
+            default -> throw new IllegalArgumentException("Expected true or false, got " + value);
+        };
+    }
+
+    private static Character parseCharacter(String value) {
+        if (value.length() != 1) {
+            throw new IllegalArgumentException("Expected a single character, got " + value.length());
+        }
+        return value.charAt(0);
     }
 
 }

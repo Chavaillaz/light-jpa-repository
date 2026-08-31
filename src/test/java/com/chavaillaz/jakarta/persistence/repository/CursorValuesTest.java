@@ -2,7 +2,6 @@ package com.chavaillaz.jakarta.persistence.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -106,10 +105,30 @@ class CursorValuesTest {
     }
 
     @Test
-    @DisplayName("fails loudly when a value cannot be parsed for its type")
+    @DisplayName("rejects a value that cannot be parsed for its type as a malformed cursor")
     void failsOnAnInvalidValue() {
-        assertThatThrownBy(() -> CursorValues.parse("not-a-number", Integer.class))
-                .isInstanceOf(NumberFormatException.class);
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> CursorValues.parse("not-a-number", Integer.class))
+                .withMessageContaining("Invalid cursor key value not-a-number")
+                .withCauseInstanceOf(NumberFormatException.class);
+    }
+
+    @Test
+    @DisplayName("rejects an empty or multiple character value of a character key, rather than overflowing")
+    void failsOnAnInvalidCharacter() {
+        assertThat(CursorValues.parse("a", Character.class)).isEqualTo('a');
+
+        assertThatIllegalArgumentException().isThrownBy(() -> CursorValues.parse("", Character.class));
+        assertThatIllegalArgumentException().isThrownBy(() -> CursorValues.parse("ab", Character.class));
+    }
+
+    @Test
+    @DisplayName("rejects anything but true or false for a boolean key, rather than silently reading it as false")
+    void failsOnAnInvalidBoolean() {
+        assertThat(CursorValues.parse("true", Boolean.class)).isTrue();
+        assertThat(CursorValues.parse("false", Boolean.class)).isFalse();
+
+        assertThatIllegalArgumentException().isThrownBy(() -> CursorValues.parse("garbage", Boolean.class));
     }
 
 }

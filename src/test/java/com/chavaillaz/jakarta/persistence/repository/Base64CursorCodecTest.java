@@ -89,6 +89,16 @@ class Base64CursorCodecTest {
     }
 
     @Test
+    @DisplayName("rejects a token whose direction is not one it issues, rather than reading it as forward")
+    void rejectsAnUnknownDirection() {
+        String forged = Base64CursorCodec.encodeValue("xcafe|" + Base64CursorCodec.encodeValue("Geisha"));
+
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> codec.decode(forged))
+                .withMessage("Malformed cursor");
+    }
+
+    @Test
     @DisplayName("exposes the value codec to the subclasses")
     void exposesTheValueCodec() {
         assertThat(Base64CursorCodec.decodeValue(Base64CursorCodec.encodeValue("Café"))).isEqualTo("Café");
