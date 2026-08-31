@@ -13,6 +13,7 @@ import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.EntityType;
 import jakarta.transaction.Transactional;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +46,12 @@ import com.chavaillaz.jakarta.persistence.Identifiable;
  */
 @Transactional(MANDATORY)
 public abstract class AbstractRepository<E extends Identifiable<I>, I> implements Repository<E, I> {
+
+    /**
+     * Number of identifiers looked up by a single {@code IN} predicate, staying under the limit of the strictest
+     * databases, Oracle rejecting a list of more than a thousand elements.
+     */
+    protected static final int DEFAULT_ID_BATCH_SIZE = 1_000;
 
     /**
      * The entity manager the repository operates on.
@@ -171,12 +178,35 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
             return distinctIds.stream().map(id -> entityManager.find(entityType, id)).filter(Objects::nonNull).toList();
         }
 
+        // The identifiers are looked up by chunks, several databases rejecting an IN list beyond a few thousand
+        // elements (a thousand on Oracle) and every one of them degrading long before that
+        List<E> entities = new ArrayList<>(distinctIds.size());
+        for (int start = 0; start < distinctIds.size(); start += idBatchSize()) {
+            entities.addAll(findAllByIdChunk(distinctIds.subList(start, Math.min(start + idBatchSize(), distinctIds.size())), idAttribute.get()));
+        }
+        return List.copyOf(entities);
+    }
+
+    private List<E> findAllByIdChunk(List<I> ids, String idAttribute) {
         CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
         CriteriaQuery<E> query = criteriaBuilder.createQuery(entityType);
         Root<E> root = query.from(entityType);
-        query.select(root).where(root.get(idAttribute.get()).in(distinctIds));
+        query.select(root).where(root.get(idAttribute).in(ids));
 
         return entityManager.createQuery(query).getResultList();
+    }
+
+    /**
+     * Gets the number of identifiers looked up by a single {@code IN} predicate, {@value #DEFAULT_ID_BATCH_SIZE}
+     * by default.
+     * <p>
+     * Override to match the limit of the underlying database, which rejects a longer list of parameters, or to
+     * lower it so that the query plans stay cacheable.
+     *
+     * @return The maximum number of identifiers per query, which must be strictly positive
+     */
+    protected int idBatchSize() {
+        return DEFAULT_ID_BATCH_SIZE;
     }
 
     /**

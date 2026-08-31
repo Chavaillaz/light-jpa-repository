@@ -14,6 +14,7 @@ import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.name
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
+import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.function.Function;
 
@@ -241,6 +242,47 @@ class CoffeeSearchTest extends HibernateTest {
             assertThatIllegalArgumentException()
                     .isThrownBy(() -> withRepository(repository -> repository.findAll(0, 3, Sort.parse("notes"))))
                     .withMessageContaining("collection property notes");
+        }
+
+    }
+
+    @Nested
+    @DisplayName("with a batch of identifiers")
+    class Identifiers {
+
+        @Test
+        @DisplayName("looks the identifiers up by chunks, so that a long list cannot break the query")
+        void looksUpByChunks() {
+            List<Long> ids = inTransaction(entityManager -> new CoffeeRepositoryJpa(entityManager).findAll().stream()
+                    .map(CoffeeEntity::getId)
+                    .toList());
+
+            List<CoffeeEntity> found = inTransaction(entityManager -> {
+                statistics().clear();
+                return new SmallBatchCoffeeRepository(entityManager).findAllById(ids);
+            });
+
+            assertThat(namesOf(found)).containsExactlyInAnyOrderElementsOf(MENU);
+            assertThat(statistics().getPrepareStatementCount())
+                    .as("seven identifiers looked up two by two")
+                    .isEqualTo(4);
+        }
+
+    }
+
+    /**
+     * A repository looking the identifiers up two by two, so that the chunking of the {@code IN} predicate is
+     * exercised without persisting the thousand rows the default batch size would need.
+     */
+    static class SmallBatchCoffeeRepository extends CoffeeRepositoryJpa {
+
+        SmallBatchCoffeeRepository(EntityManager entityManager) {
+            super(entityManager);
+        }
+
+        @Override
+        protected int idBatchSize() {
+            return 2;
         }
 
     }
