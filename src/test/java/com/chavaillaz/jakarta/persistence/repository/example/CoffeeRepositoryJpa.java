@@ -41,6 +41,14 @@ public class CoffeeRepositoryJpa extends AbstractRepository<CoffeeEntity, Long> 
     }
 
     /**
+     * A join on the collection, written the naive way: it duplicates a coffee as many times as it has matching
+     * notes, and the repository has to keep it from corrupting the results, the count and the pagination.
+     */
+    public static Criteria<CoffeeEntity> joiningNotes(List<String> flavours) {
+        return (criteriaBuilder, query, root) -> root.join(CoffeeEntity_.notes).get(TastingNoteEntity_.flavour).in(flavours);
+    }
+
+    /**
      * A correlated subquery, which is exactly what a {@link org.hibernate.query.restriction.Restriction} cannot
      * express, and which does not duplicate the rows as a join on the collection would.
      */

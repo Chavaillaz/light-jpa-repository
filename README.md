@@ -350,6 +350,13 @@ public static Criteria<CoffeeEntity> tasting(String flavour) {
 }
 ```
 
+A restriction or a criteria joining a to-many association would return an entity as many times as it has matching
+children. The repository moves such predicates into a correlated `exists` subquery rather than deduplicating the
+rows with a `distinct`: the row is never duplicated in the first place, so the count matches the results, the
+pagination cannot lose a row to a duplicated one, and the ordering stays free to reach a joined attribute — which
+a `select distinct` is not, PostgreSQL and Oracle rejecting an `order by` on an expression outside its select
+list, where H2 and MySQL accept it.
+
 For dynamic filtering exposed to the API consumers as query strings, such as `origin==Ethiopia;strength=gt=5`, see
 the [rsql-jpa-repository](https://github.com/chavaillaz/rsql-jpa-repository) extension, built on the very same
 `searchableProperties()` and ordering rules.

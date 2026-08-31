@@ -5,12 +5,14 @@ import static org.hibernate.query.restriction.Restriction.unrestricted;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.criteria.CommonAbstractCriteria;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaDelete;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.From;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import java.util.List;
 import java.util.Optional;
 
@@ -114,23 +116,94 @@ public class EntityQueries<E> {
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      */
     public SelectionQuery<E> createQuery(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort) {
+        boolean semiJoined = joinsCollection(restriction, criteria);
+
         return SelectionSpecification.create(entityType)
-                .restrict(restriction == null ? unrestricted() : restriction)
+                // A restriction joining a collection is moved into the semi join below, and must therefore not be
+                // applied to the root as well, which would join it a second time
+                .restrict(restriction == null || semiJoined ? unrestricted() : restriction)
                 .augment((criteriaBuilder, query, root) -> {
-                    if (criteria != null) {
+                    if (semiJoined) {
+                        restrict(criteriaBuilder, query, semiJoin(criteriaBuilder, query, root, restriction, criteria));
+                    } else if (criteria != null) {
                         // Appended through the null safe helper, the restriction of the query being absent when
                         // the given one matches every entity
                         restrict(criteriaBuilder, query, criteria.toPredicate(criteriaBuilder, query, root));
                     }
-                    // A restriction or a criteria joining a to-many association duplicates the root entity as
-                    // many times as it has matching children; distinct is applied automatically rather than
-                    // left to the caller, so a forgotten join cannot silently corrupt the results or the count
-                    if (hasCollectionJoin(root)) {
-                        query.distinct(true);
-                    }
                     query.orderBy(ordering.buildOrders(root, sort));
                 })
                 .createQuery(entityManager);
+    }
+
+    /**
+     * Checks whether the given restriction and criteria join a to-many association, which duplicates the root
+     * entity as many times as it has matching children.
+     * <p>
+     * The predicates are built against a throwaway root, which is the only way to know what they join: they are
+     * opaque until they are applied. Nothing but criteria nodes is created, no query reaching the database.
+     *
+     * @param restriction The restriction to inspect, or {@code null}
+     * @param criteria    The criteria to inspect, or {@code null}
+     * @return {@code true} if applying them to a root would join a collection, {@code false} otherwise
+     */
+    protected boolean joinsCollection(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
+        if (restriction == null && criteria == null) {
+            return false;
+        }
+
+        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+        CriteriaQuery<E> probe = criteriaBuilder.createQuery(entityType);
+        Root<E> root = probe.from(entityType);
+
+        if (restriction != null) {
+            restriction.toPredicate(root, criteriaBuilder);
+        }
+        if (criteria != null) {
+            criteria.toPredicate(criteriaBuilder, probe, root);
+        }
+        return hasCollectionJoin(root);
+    }
+
+    /**
+     * Builds the predicate keeping the entities matching the given restriction and criteria as a semi join: the
+     * predicates are applied to a correlated subquery instead of to the root of the query itself.
+     * <p>
+     * A collection join multiplies the root entity by its matching children, which used to be compensated by a
+     * {@code distinct}. That compensation is not portable: a {@code select distinct} may only be ordered by
+     * expressions of its own select list, so ordering on a joined attribute, which the pagination of this library
+     * does as soon as a nested property is sorted on, is rejected by PostgreSQL and Oracle, whereas H2 and MySQL
+     * accept it. It also forces the database to deduplicate a result set it had to multiply first.
+     * <p>
+     * An {@code exists} subquery has neither problem: the row is never duplicated in the first place, so no
+     * {@code distinct} is needed, the ordering is free to reach whatever it needs, and the count matches the
+     * results without any further care.
+     *
+     * @param criteriaBuilder The builder to use
+     * @param query           The query being built, to create the subquery from
+     * @param root            The root entity of the query
+     * @param restriction     The restriction to apply, or {@code null}
+     * @param criteria        The criteria to apply, or {@code null}
+     * @return The corresponding predicate
+     */
+    protected Predicate semiJoin(
+            CriteriaBuilder criteriaBuilder,
+            CommonAbstractCriteria query,
+            Root<E> root,
+            @Nullable Restriction<? super E> restriction,
+            @Nullable Criteria<E> criteria) {
+        Subquery<Integer> matching = query.subquery(Integer.class);
+        Root<E> matched = matching.from(entityType);
+
+        // Comparing the two roots as entities correlates the subquery on the identifier, whatever it is made of
+        Predicate predicate = criteriaBuilder.equal(matched, root);
+        if (restriction != null) {
+            predicate = criteriaBuilder.and(predicate, restriction.toPredicate(matched, criteriaBuilder));
+        }
+        if (criteria != null) {
+            predicate = criteriaBuilder.and(predicate, criteria.toPredicate(criteriaBuilder, matching, matched));
+        }
+
+        return criteriaBuilder.exists(matching.select(criteriaBuilder.literal(1)).where(predicate));
     }
 
     /**
@@ -320,17 +393,18 @@ public class EntityQueries<E> {
         CursorPosition position = Cursors.position(cursorCodec, cursor, resolvedSort);
         Sort direction = Cursors.direction(resolvedSort, position);
 
+        boolean semiJoined = joinsCollection(restriction, criteria);
+
         List<E> fetched = SelectionSpecification.create(entityType)
-                .restrict(restriction == null ? unrestricted() : restriction)
+                .restrict(restriction == null || semiJoined ? unrestricted() : restriction)
                 .augment((criteriaBuilder, query, root) -> {
-                    if (criteria != null) {
+                    if (semiJoined) {
+                        restrict(criteriaBuilder, query, semiJoin(criteriaBuilder, query, root, restriction, criteria));
+                    } else if (criteria != null) {
                         restrict(criteriaBuilder, query, criteria.toPredicate(criteriaBuilder, query, root));
                     }
                     if (position != null) {
                         restrict(criteriaBuilder, query, Keysets.seek(criteriaBuilder, root, direction, position.values(), cursorKeyCodec));
-                    }
-                    if (hasCollectionJoin(root)) {
-                        query.distinct(true);
                     }
                     query.orderBy(Keysets.toOrders(criteriaBuilder, root, direction));
                 })
