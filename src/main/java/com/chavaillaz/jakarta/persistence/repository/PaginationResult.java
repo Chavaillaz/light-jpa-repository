@@ -2,6 +2,7 @@ package com.chavaillaz.jakarta.persistence.repository;
 
 import static java.lang.Math.ceil;
 import static java.lang.Math.max;
+import static java.lang.Math.min;
 
 import java.util.List;
 import java.util.function.Function;
@@ -47,14 +48,17 @@ public record PaginationResult<T>(
      * @return The corresponding page
      */
     public static <T> PaginationResult<T> of(List<T> items, int currentPage, int pageSize, long totalItems) {
-        int totalPages = (pageSize <= 0) ? 0 : (int) ceil((double) totalItems / pageSize);
+        // Both are computed on a long and then narrowed: a page number an API consumer is free to set as high as
+        // it wants would otherwise overflow, reporting a following page for a page far beyond the last one
+        long pages = (pageSize <= 0) ? 0 : (long) ceil((double) totalItems / pageSize);
+        int totalPages = (int) min(pages, Integer.MAX_VALUE);
         return new PaginationResult<>(
                 items,
                 currentPage,
                 pageSize,
                 totalPages,
                 totalItems,
-                currentPage + 1 < totalPages,
+                (long) currentPage + 1 < pages,
                 currentPage > 0);
     }
 

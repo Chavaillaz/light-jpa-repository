@@ -146,6 +146,14 @@ public class EntityQueries<E> {
         if (pageable.isPaginated()) {
             // The count is intentionally computed from the same query, before the pagination is applied
             long totalItems = query.getResultCount();
+
+            // A page number far beyond the end overflows the int offset the JDBC drivers take, which the
+            // providers reject as a negative first result; such a page is empty anyway, so it is returned as is
+            // rather than surfaced as a server error on what is a plain query parameter
+            if (Pageables.overflows(pageable)) {
+                return PaginationResult.of(List.of(), pageable.page(), pageable.size(), totalItems);
+            }
+
             return PaginationResult.of(query.setPage(toPage(pageable)).getResultList(), pageable.page(), pageable.size(), totalItems);
         }
 

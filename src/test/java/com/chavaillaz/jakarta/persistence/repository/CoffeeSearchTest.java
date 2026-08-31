@@ -94,6 +94,20 @@ class CoffeeSearchTest extends HibernateTest {
         }
 
         @Test
+        @DisplayName("returns an empty page, and not an error, when the requested offset overflows")
+        void returnsAnEmptyPageBeyondTheLargestOffset() {
+            // page * size does not fit in the int offset a query takes, which the provider rejects as a negative
+            // first result; the page number is a plain query parameter, so it cannot surface as a server error
+            PaginationResult<CoffeeEntity> result =
+                    withRepository(repository -> repository.findAll(Integer.MAX_VALUE, 1000));
+
+            assertThat(result.items()).isEmpty();
+            assertThat(result.totalItems()).isEqualTo(7);
+            assertThat(result.hasNext()).isFalse();
+            assertThat(result.hasPrevious()).isTrue();
+        }
+
+        @Test
         @DisplayName("returns everything as a single page when unpaged")
         void findsEverythingWhenUnpaged() {
             PaginationResult<CoffeeEntity> result = withRepository(repository -> repository.findAll(Pageable.UNPAGED));
