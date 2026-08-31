@@ -310,6 +310,10 @@ must be consumed within the very same transaction it was obtained from — like 
 querying the persistence context as it is pulled from, so collect it eagerly (`toList()`) before returning it out of
 a transactional method.
 
+Only the fetching is lazy, not the retention: every entity walked stays managed until the transaction ends, so
+walking a whole large table still grows the heap the way loading it at once would. When the point is to avoid
+holding the rows in memory, clear the persistence context periodically or walk the table with a stateless session.
+
 ## Filtering
 
 A `Restriction`, from `org.hibernate.query.restriction`, is checked at compile time against the JPA static

@@ -167,6 +167,11 @@ public interface Repository<E extends Identifiable<I>, I> {
      * {@link jakarta.persistence.Query#getResultStream()}, it keeps querying the persistence context as it is
      * pulled from, so it cannot be returned from a transactional method and consumed afterward — collect it
      * eagerly beforehand if the caller needs to do that.
+     * <p>
+     * Only the fetching is lazy, not the retention: every entity walked stays managed by the persistence context
+     * until the transaction ends, so walking a whole large table still grows the heap as loading it at once
+     * would. Clear the persistence context periodically, or walk the table with a stateless session, when the
+     * point of the walk is to avoid holding the rows in memory rather than to avoid a single huge query.
      *
      * @param sort     The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @param pageSize The number of items fetched per underlying page, capped to {@link Cursor#MAX_SIZE}
