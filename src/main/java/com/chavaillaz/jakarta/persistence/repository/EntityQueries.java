@@ -5,9 +5,11 @@ import static org.hibernate.query.restriction.Restriction.unrestricted;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaDelete;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.From;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import java.util.List;
 import java.util.Optional;
 
@@ -189,6 +191,73 @@ public class EntityQueries<E> {
      */
     public long count(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
         return createQuery(restriction, criteria, Sort.NONE).getResultCount();
+    }
+
+    /**
+     * Checks whether at least one entity matches the given restriction and additional criteria.
+     * <p>
+     * Unlike {@link #count(Restriction, Criteria)}, the database stops at the first matching row and no entity is
+     * hydrated: only a literal is selected, so nothing is added to the persistence context either.
+     *
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
+     *                    the entities
+     * @param criteria    The additional criteria to apply, or {@code null}
+     * @return {@code true} if at least one entity matches, {@code false} otherwise
+     */
+    public boolean exists(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
+        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+        CriteriaQuery<Integer> query = criteriaBuilder.createQuery(Integer.class);
+        Root<E> root = query.from(entityType);
+        query.select(criteriaBuilder.literal(1));
+
+        if (restriction != null) {
+            restrict(criteriaBuilder, query, restriction.toPredicate(root, criteriaBuilder));
+        }
+        if (criteria != null) {
+            restrict(criteriaBuilder, query, criteria.toPredicate(criteriaBuilder, query, root));
+        }
+
+        // No ordering is applied, the question being whether a row exists and not which one comes first, and a
+        // plain list is used rather than getSingleResult(), which would throw when nothing matches
+        return !entityManager.createQuery(query).setMaxResults(1).getResultList().isEmpty();
+    }
+
+    /**
+     * Deletes every entity matching the given restriction and additional criteria, in a single statement.
+     * <p>
+     * This is a bulk deletion, which the database performs on its own: it does not cascade to the associations,
+     * does not honour {@code orphanRemoval}, does not run the {@code @PreRemove} callbacks and leaves the already
+     * loaded entities in the persistence context, which therefore holds rows that no longer exist. Prefer
+     * deleting the entities one by one when any of that matters, and refresh or clear the persistence context
+     * afterwards when it does not.
+     * <p>
+     * A restriction joining an association cannot be expressed by a bulk deletion, which has no {@code from}
+     * clause to join: restrict on the attributes of the entity itself, or select the entities to delete with
+     * {@link Criteria#exists(Class, String, java.util.function.BiFunction)}, which is a subquery.
+     *
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to delete
+     *                    every entity
+     * @param criteria    The additional criteria to apply, or {@code null}
+     * @return The number of deleted entities
+     */
+    public int delete(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
+        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+        CriteriaDelete<E> delete = criteriaBuilder.createCriteriaDelete(entityType);
+        Root<E> root = delete.from(entityType);
+
+        Predicate predicate = null;
+        if (restriction != null) {
+            predicate = restriction.toPredicate(root, criteriaBuilder);
+        }
+        if (criteria != null) {
+            Predicate additional = criteria.toPredicate(criteriaBuilder, delete, root);
+            predicate = predicate == null ? additional : criteriaBuilder.and(predicate, additional);
+        }
+        if (predicate != null) {
+            delete.where(predicate);
+        }
+
+        return entityManager.createQuery(delete).executeUpdate();
     }
 
     /**

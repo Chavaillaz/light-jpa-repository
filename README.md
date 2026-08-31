@@ -72,7 +72,7 @@ The library's goal is to provide the following essential methods for your reposi
 - **`refresh`**: Reloads the state of a managed entity from the database, discarding local changes.
 - **`getReference`**: Retrieves a reference to an entity, with its state lazily fetched.
 - **`save`**: Persists a new entity or merges an existing one.
-- **`delete`** and **`deleteById`**: Removes an entity.
+- **`delete`**, **`deleteById`** and **`deleteAllById`**: Removes an entity.
 
 To use the library, ensure that your entities implement the `Identifiable` interface to enable retrieval of their
 primary key. Next, define an interface that extends the `Repository` interface and add any custom methods needed for
@@ -344,6 +344,29 @@ public static Criteria<CoffeeEntity> tasting(String flavour) {
 For dynamic filtering exposed to the API consumers as query strings, such as `origin==Ethiopia;strength=gt=5`, see
 the [rsql-jpa-repository](https://github.com/chavaillaz/rsql-jpa-repository) extension, built on the very same
 `searchableProperties()` and ordering rules.
+
+## Existence and bulk operations
+
+`exists` answers whether anything matches without hydrating an entity: the database stops at the first row and
+only a literal is selected, so it beats both `count(...) > 0` and `first(...).isPresent()`:
+
+```java
+protected boolean existsFromOrigin(String origin) {
+    return exists(Restriction.equal(CoffeeEntity_.origin, origin));
+}
+```
+
+`deleteAll(restriction)` deletes every matching entity in a single statement, and returns how many were deleted.
+Being a bulk deletion, it is performed by the database and therefore does **not** cascade, does not honour
+`orphanRemoval`, does not run the `@PreRemove` callbacks and leaves the already loaded entities in the persistence
+context. Use `deleteAll(entities)` or `deleteAllById(ids)` when any of that matters — both load the entities first
+and delete them one by one, exactly as `delete` does. A bulk deletion also has no `from` clause to join, so
+restrict on the attributes of the entity itself, or use a subquery.
+
+`saveAllInBatches(entities)` is for the bulk loads a plain `saveAll` cannot hold in memory: it flushes and clears
+the persistence context every `saveBatchSize()` entities, which keeps both the memory and the dirty checking
+bounded, and lets `hibernate.jdbc.batch_size` group the statements. Clearing detaches **every** entity of the
+persistence context, not only the saved ones, so call it from a method that holds nothing else.
 
 ## Locking
 

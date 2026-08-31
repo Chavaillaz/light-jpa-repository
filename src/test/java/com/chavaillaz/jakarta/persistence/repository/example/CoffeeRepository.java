@@ -31,4 +31,14 @@ public interface CoffeeRepository extends Repository<CoffeeEntity, Long> {
 
     List<TastingNoteEntity> findNotesOf(CoffeeEntity coffee);
 
+    boolean existsFromOrigin(String origin);
+
+    boolean existsTasting(String flavour);
+
+    int deleteFromOrigin(String origin);
+
+    int deleteWithoutNotes();
+
+    int deleteTasting(String flavour);
+
 }

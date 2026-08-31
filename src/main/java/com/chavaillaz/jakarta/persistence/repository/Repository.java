@@ -299,4 +299,18 @@ public interface Repository<E extends Identifiable<I>, I> {
         entities.forEach(this::delete);
     }
 
+    /**
+     * Deletes the entities with the given identifiers, silently skipping the ones that do not exist.
+     * <p>
+     * The entities are loaded first, so that the deletion cascades and runs the callbacks exactly as
+     * {@link #delete(Identifiable)} does. A repository needing the single statement of a bulk deletion, and
+     * accepting that it does neither, exposes its own method built on {@code deleteAll(Restriction)}.
+     *
+     * @param ids The identifiers of the entities to delete
+     * @see #findAllById(Collection)
+     */
+    default void deleteAllById(Collection<I> ids) {
+        deleteAll(findAllById(ids));
+    }
+
 }

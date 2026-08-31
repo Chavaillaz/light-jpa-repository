@@ -1,7 +1,7 @@
 package com.chavaillaz.jakarta.persistence.repository;
 
+import jakarta.persistence.criteria.CommonAbstractCriteria;
 import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
@@ -99,13 +99,17 @@ public interface Criteria<T> {
 
     /**
      * Builds the predicate to add to the query.
+     * <p>
+     * The query is only taken as the {@link CommonAbstractCriteria} the subqueries are created from, and not as
+     * the typed {@link CriteriaQuery} being selected, so that the very same criteria can restrict a selection, a
+     * count, an existence check and a bulk deletion, whose result types all differ.
      *
      * @param criteriaBuilder The builder to use to create the predicate
      * @param query           The query being built, to create the subqueries from
      * @param root            The root entity of the query
      * @return The corresponding predicate
      */
-    Predicate toPredicate(CriteriaBuilder criteriaBuilder, CriteriaQuery<T> query, Root<T> root);
+    Predicate toPredicate(CriteriaBuilder criteriaBuilder, CommonAbstractCriteria query, Root<T> root);
 
 }
 

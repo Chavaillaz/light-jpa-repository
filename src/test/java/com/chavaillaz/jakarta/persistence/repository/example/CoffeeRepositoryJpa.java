@@ -115,4 +115,32 @@ public class CoffeeRepositoryJpa extends AbstractRepository<CoffeeEntity, Long> 
         return search(TastingNoteEntity.class, equal(TastingNoteEntity_.coffee, coffee));
     }
 
+    @Override
+    public boolean existsFromOrigin(String origin) {
+        return exists(equal(CoffeeEntity_.origin, origin));
+    }
+
+    @Override
+    public boolean existsTasting(String flavour) {
+        return exists(tasting(flavour));
+    }
+
+    @Override
+    public int deleteFromOrigin(String origin) {
+        return deleteAll(equal(CoffeeEntity_.origin, origin));
+    }
+
+    /**
+     * A criteria expressed on a collection, which a bulk deletion carries as a subquery and not as a join.
+     */
+    @Override
+    public int deleteWithoutNotes() {
+        return deleteAll((criteriaBuilder, query, root) -> criteriaBuilder.isEmpty(root.get(CoffeeEntity_.notes)));
+    }
+
+    @Override
+    public int deleteTasting(String flavour) {
+        return deleteAll(tasting(flavour));
+    }
+
 }

@@ -54,6 +54,12 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     protected static final int DEFAULT_ID_BATCH_SIZE = 1_000;
 
     /**
+     * Number of entities saved between two flushes of the persistence context, matching the default JDBC batch
+     * size a persistence unit is usually configured with.
+     */
+    protected static final int DEFAULT_SAVE_BATCH_SIZE = 50;
+
+    /**
      * The entity manager the repository operates on.
      */
     protected final EntityManager entityManager;
@@ -442,6 +448,84 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     }
 
     /**
+     * Checks whether at least one entity matches the given restriction, without hydrating it.
+     *
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
+     *                    the entities
+     * @return {@code true} if at least one entity matches, {@code false} otherwise
+     * @see #exists(Restriction, Criteria)
+     */
+    protected boolean exists(@Nullable Restriction<? super E> restriction) {
+        return queries().exists(restriction, null);
+    }
+
+    /**
+     * Checks whether at least one entity matches the given restriction and additional criteria, without
+     * hydrating it.
+     * <p>
+     * Prefer this over {@code count(...) > 0}: the database stops at the first matching row instead of counting
+     * them all, and over {@code first(...).isPresent()}: no ordering is applied and no entity is loaded.
+     *
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
+     *                    the entities
+     * @param criteria    The additional criteria to apply, or {@code null}
+     * @return {@code true} if at least one entity matches, {@code false} otherwise
+     */
+    protected boolean exists(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
+        return queries().exists(restriction, criteria);
+    }
+
+    /**
+     * Checks whether at least one entity matches the given criteria only, without hydrating it.
+     *
+     * @param criteria The criteria to apply, or {@code null} to match all the entities
+     * @return {@code true} if at least one entity matches, {@code false} otherwise
+     * @see #exists(Restriction, Criteria)
+     */
+    protected boolean exists(@Nullable Criteria<E> criteria) {
+        return queries().exists(null, criteria);
+    }
+
+    /**
+     * Deletes every entity matching the given restriction, in a single statement.
+     *
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to delete
+     *                    every entity
+     * @return The number of deleted entities
+     * @see #deleteAll(Restriction, Criteria)
+     */
+    protected int deleteAll(@Nullable Restriction<? super E> restriction) {
+        return queries().delete(restriction, null);
+    }
+
+    /**
+     * Deletes every entity matching the given restriction and additional criteria, in a single statement.
+     * <p>
+     * This is a bulk deletion: it does not cascade, does not honour {@code orphanRemoval}, does not run the
+     * {@code @PreRemove} callbacks and leaves the already loaded entities in the persistence context. Prefer
+     * {@link #deleteAll(Collection)} when any of that matters; see {@link EntityQueries#delete} for the details.
+     *
+     * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to delete
+     *                    every entity
+     * @param criteria    The additional criteria to apply, or {@code null}
+     * @return The number of deleted entities
+     */
+    protected int deleteAll(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
+        return queries().delete(restriction, criteria);
+    }
+
+    /**
+     * Deletes every entity matching the given criteria only, in a single statement.
+     *
+     * @param criteria The criteria to apply, or {@code null} to delete every entity
+     * @return The number of deleted entities
+     * @see #deleteAll(Restriction, Criteria)
+     */
+    protected int deleteAll(@Nullable Criteria<E> criteria) {
+        return queries().delete(null, criteria);
+    }
+
+    /**
      * Gets the first entity matching the given restriction, following the default ordering of the repository.
      *
      * @param restriction The restriction to apply, or {@code null}
@@ -623,6 +707,52 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
             entity = entityManager.merge(entity);
         }
         return entity;
+    }
+
+    /**
+     * Saves the given entities, flushing and clearing the persistence context every {@link #saveBatchSize()}
+     * entities, for the bulk loads a plain {@link #saveAll(Collection)} cannot hold in memory.
+     * <p>
+     * Saving a large collection through the persistence context grows it with every entity, and each flush then
+     * dirty checks everything it already holds, so the cost grows with the square of the number of entities.
+     * Flushing and clearing by batches keeps both bounded, which is also what lets the JDBC batching configured
+     * by {@code hibernate.jdbc.batch_size} group the statements.
+     * <p>
+     * Clearing detaches <em>every</em> entity of the persistence context, not only the saved ones: any entity the
+     * caller still holds becomes detached, and the generated identifiers are the only state guaranteed to be
+     * populated on the given ones. Call this from a method that owns its transaction and holds nothing else,
+     * and use {@link #saveAll(Collection)} otherwise.
+     *
+     * @param entities The entities to save
+     * @return The number of saved entities
+     */
+    public int saveAllInBatches(Collection<E> entities) {
+        int saved = 0;
+        for (E entity : entities) {
+            save(entity);
+            if (++saved % saveBatchSize() == 0) {
+                entityManager.flush();
+                entityManager.clear();
+            }
+        }
+        if (saved % saveBatchSize() != 0) {
+            entityManager.flush();
+            entityManager.clear();
+        }
+        return saved;
+    }
+
+    /**
+     * Gets the number of entities saved between two flushes by {@link #saveAllInBatches(Collection)},
+     * {@value #DEFAULT_SAVE_BATCH_SIZE} by default.
+     * <p>
+     * Override to match the {@code hibernate.jdbc.batch_size} of the persistence unit, the statements only being
+     * grouped by the driver up to that size.
+     *
+     * @return The number of entities per batch, which must be strictly positive
+     */
+    protected int saveBatchSize() {
+        return DEFAULT_SAVE_BATCH_SIZE;
     }
 
     @Override
