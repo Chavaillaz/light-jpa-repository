@@ -115,7 +115,9 @@ public class EntityQueries<E> {
                 .restrict(restriction == null ? unrestricted() : restriction)
                 .augment((criteriaBuilder, query, root) -> {
                     if (criteria != null) {
-                        query.where(query.getRestriction(), criteria.toPredicate(criteriaBuilder, query, root));
+                        // Appended through the null safe helper, the restriction of the query being absent when
+                        // the given one matches every entity
+                        restrict(criteriaBuilder, query, criteria.toPredicate(criteriaBuilder, query, root));
                     }
                     // A restriction or a criteria joining a to-many association duplicates the root entity as
                     // many times as it has matching children; distinct is applied automatically rather than
