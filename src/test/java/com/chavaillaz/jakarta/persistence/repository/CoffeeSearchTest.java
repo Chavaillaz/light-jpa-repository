@@ -176,16 +176,30 @@ class CoffeeSearchTest extends HibernateTest {
         }
 
         @Test
-        @DisplayName("silently drops an entity whose nullable association is not set when sorting on a nested property")
-        void dropsANullAssociationWhenSortingNested() {
-            // A ManyToOne navigated through Path#get() for the ORDER BY is an implicit inner join: a coffee
-            // without a roaster has nothing to join to, and is therefore excluded rather than sorted first or last
+        @DisplayName("keeps an entity whose nullable association is not set when sorting on a nested property")
+        void keepsANullAssociationWhenSortingNested() {
+            // A ManyToOne is navigated with a left join rather than with the implicit inner join Path#get()
+            // produces, so that a coffee without a roaster is still returned, and still counted
             persist(coffee("Antigua", "Guatemala", Roast.MEDIUM, "20.00", 5));
 
             List<CoffeeEntity> coffees = withRepository(repository -> repository.findAll(Sort.parse("roaster,-name")));
 
-            assertThat(namesOf(coffees)).as("Antigua has no roaster and is silently excluded").doesNotContain("Antigua");
-            assertThat(coffees).hasSize(7);
+            assertThat(namesOf(coffees)).as("Antigua has no roaster but is still returned").contains("Antigua");
+            assertThat(coffees).hasSize(8);
+        }
+
+        @Test
+        @DisplayName("counts exactly what a nested ordering returns")
+        void countsWhatANestedOrderingReturns() {
+            // The count is derived from the same query, without its ordering: an inner join in the ORDER BY
+            // would drop the roaster-less coffee from the page while still counting it
+            persist(coffee("Antigua", "Guatemala", Roast.MEDIUM, "20.00", 5));
+
+            PaginationResult<CoffeeEntity> page =
+                    withRepository(repository -> repository.findAll(0, 100, Sort.parse("roaster")));
+
+            assertThat(page.totalItems()).isEqualTo(page.items().size());
+            assertThat(page.totalItems()).isEqualTo(8);
         }
 
         @Test

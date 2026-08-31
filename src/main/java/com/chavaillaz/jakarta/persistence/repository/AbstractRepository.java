@@ -495,6 +495,12 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * Override to sort on business attributes; the identifier is appended automatically (see {@link Sort}), so it
      * does not need to be added here. The returned paths must belong to the root entity, a path on a joined
      * collection being incompatible with the distinct queries.
+     * <p>
+     * Unlike a requested ordering, which the repository resolves itself, a default ordering on a nested property
+     * is built here with the raw criteria API: {@code root.get("roaster").get("name")} is an implicit inner join
+     * and silently drops the entities having no roaster, whereas
+     * {@code root.join("roaster", JoinType.LEFT).get("name")} keeps them, which is what the repository does for a
+     * requested ordering.
      *
      * @param criteriaBuilder The builder to use to create the ordering
      * @param root            The root entity of the query

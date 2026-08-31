@@ -10,6 +10,7 @@ import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.YIRG
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.coffee;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.namesOf;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.roaster;
+import static jakarta.persistence.criteria.JoinType.LEFT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
@@ -74,6 +75,26 @@ class KeysetsTest extends HibernateTest {
     void resolvesAPath() {
         assertThat(EntityOrdering.nameOf(Keysets.path(root, "name"))).isEqualTo("name");
         assertThat(EntityOrdering.nameOf(Keysets.path(root, "roaster.country"))).isEqualTo("roaster.country");
+    }
+
+    @Test
+    @DisplayName("navigates a nested association with a left join, keeping the entities not having one")
+    void navigatesANestedAssociationWithALeftJoin() {
+        Keysets.path(root, "roaster.name");
+
+        assertThat(root.getJoins()).singleElement().satisfies(join -> {
+            assertThat(join.getAttribute().getName()).isEqualTo(CoffeeEntity_.ROASTER);
+            assertThat(join.getJoinType()).isEqualTo(LEFT);
+        });
+    }
+
+    @Test
+    @DisplayName("reuses the join of an association navigated by several keys, rather than joining it twice")
+    void reusesTheJoinOfANestedAssociation() {
+        Keysets.path(root, "roaster.name");
+        Keysets.path(root, "roaster.country");
+
+        assertThat(root.getJoins()).as("a single join is created and reused").hasSize(1);
     }
 
     @Test

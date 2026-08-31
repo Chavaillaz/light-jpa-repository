@@ -208,10 +208,14 @@ public class EntityOrdering<E> {
      * @throws IllegalArgumentException if the property is unknown or refers to a collection
      */
     public Path<?> resolvePath(Root<E> root, String property) {
+        String[] attributes = Keysets.split(resolveProperty(property));
+
         Path<?> path = root;
-        for (String attribute : resolveProperty(property).split("\\.")) {
+        for (int index = 0; index < attributes.length; index++) {
             try {
-                path = path.get(attribute);
+                // A nested property navigates its association with a left join, so that an entity whose
+                // association is null keeps being returned and counted, see Keysets#step
+                path = Keysets.step(path, attributes[index], index < attributes.length - 1);
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("Cannot sort on the unknown property " + property, e);
             }

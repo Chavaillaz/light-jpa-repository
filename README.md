@@ -252,10 +252,15 @@ it is the target of some declared property, under whatever public alias — `roa
 `roaster` maps to it, not because it is spelled out. A metamodel path that is the target of no declared property is
 still rejected, exactly as its public name would be.
 
-Sorting on a nested property navigates the association with a plain JPA `Path`, which is an implicit inner join:
-an entity whose association on the path is `null`, such as a coffee with no roaster, is silently excluded from the
-results rather than sorted first, last, or reported as an error. Keep that in mind before sorting or filtering on a
-nested property backed by an optional association.
+Sorting on a nested property navigates the association with a left join, reused across the criteria reaching the
+same association: an entity whose association on the path is `null`, such as a coffee with no roaster, is still
+returned and still counted, the database placing it first or last depending on its own null ordering. Cursor
+pagination is stricter, as it always is: a `null` key has no position to seek from, so scrolling on a nested
+property backed by an optional association is rejected rather than silently skipped.
+
+The `getDefaultOrders()` hook is given the raw `CriteriaBuilder` and `Root`, so a default ordering on a nested
+property is up to you: `root.get("roaster").get("name")` is an implicit *inner* join and drops the entities with no
+roaster, `root.join("roaster", LEFT).get("name")` keeps them.
 
 ## Pagination
 
