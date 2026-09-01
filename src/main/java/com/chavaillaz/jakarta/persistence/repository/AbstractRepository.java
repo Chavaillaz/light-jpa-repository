@@ -662,6 +662,10 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * This is what claiming the next row to process is written with: the ordering makes the choice
      * deterministic, and the lock is taken as the row is read, so that a concurrent transaction ordering on the
      * very same criteria does not claim it as well.
+     * <p>
+     * Order the claim on attributes of the entity itself: an ordering on a nested property navigates its
+     * association with a left join, and PostgreSQL, among others, refuses to lock the nullable side of an outer
+     * join.
      *
      * @param restriction The restriction to apply, or {@code null}
      * @param criteria    The additional criteria to apply, or {@code null}
@@ -832,6 +836,11 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * caller still holds becomes detached, and the generated identifiers are the only state guaranteed to be
      * populated on the given ones. Call this from a method that owns its transaction and holds nothing else,
      * and use {@link #saveAll(Collection)} otherwise.
+     * <p>
+     * Only the number of saved entities is returned, and not the saved ones: an entity that was already detached
+     * is merged, so what is written is a managed copy the caller never held, and holding on to a whole batch of
+     * those is exactly what this method exists to avoid. Save a collection of detached entities with
+     * {@link #saveAll(Collection)} when the merged copies are needed.
      *
      * @param entities The entities to save
      * @return The number of saved entities

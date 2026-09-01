@@ -431,6 +431,11 @@ public class EntityQueries<E> {
      * This is what claiming the next row to process is written with: the ordering makes the choice
      * deterministic, and the lock is taken as the row is read, so that a concurrent transaction ordering on the
      * very same criteria does not claim it as well.
+     * <p>
+     * Order the claim on attributes of the entity itself when a lock is taken: an ordering on a nested property
+     * navigates its association with a left join, and PostgreSQL, among others, refuses to lock the nullable side
+     * of an outer join. Sorting the candidates in the database and locking them by their own columns is portable,
+     * ordering on a joined column and locking in the same statement is not.
      *
      * @param context     The repository the query is written for
      * @param restriction The restriction to apply, or {@code null}
