@@ -216,6 +216,30 @@ class CoffeeCursorTest extends HibernateTest {
     }
 
     @Test
+    @DisplayName("leaves a way back when the rows following the position are deleted in between")
+    void leavesAWayBackFromAnEmptiedPage() {
+        CursorResult<CoffeeEntity> first = page(null, 3, Sort.NONE);
+        assertThat(first.hasNext()).isTrue();
+
+        // Everything after the third coffee is deleted while the consumer holds the token of the next page
+        withRepository(repository -> {
+            repository.deleteAll(repository.findAll().subList(3, MENU.size()));
+            return null;
+        });
+
+        CursorResult<CoffeeEntity> emptied = page(first.next(), 3, Sort.NONE);
+
+        assertThat(emptied.items()).isEmpty();
+        assertThat(emptied.hasNext()).isFalse();
+        assertThat(emptied.hasPrevious()).as("the consumer is not stranded on the emptied page").isTrue();
+
+        // The token only carries the keys of the boundary row, so walking back from it lands strictly before it,
+        // exactly as the mirror case does: the consumer reaches the rows that are left, not the very same page
+        assertThat(namesOf(page(emptied.previous(), 3, Sort.NONE)))
+                .containsExactlyElementsOf(MENU.subList(0, 2));
+    }
+
+    @Test
     @DisplayName("applies the default size when none is requested, and caps an excessive one")
     void normalisesTheRequestedSize() {
         CursorResult<CoffeeEntity> defaulted = page(null, null, Sort.NONE);

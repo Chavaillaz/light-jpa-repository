@@ -1,7 +1,5 @@
 package com.chavaillaz.jakarta.persistence.repository;
 
-import static java.util.Objects.requireNonNull;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -121,12 +119,17 @@ public final class Cursors {
             Collections.reverse(boundaries);
         }
         if (items.isEmpty()) {
-            // Walking backwards onto an empty page, the rows we came from having been deleted in between, the
-            // consumer would otherwise be stranded with no token at all: the position it walked back from is
-            // re-issued forward, so that it can still reach whatever now follows it
+            if (position == null) {
+                // The very first page is empty, so nothing matches at all and there is nowhere to navigate to
+                return CursorResult.empty(cursor.size());
+            }
+
+            // Walking onto an emptied page, the rows we came from having been deleted in between, the consumer
+            // would otherwise be stranded with no token at all: the position it walked from is re-issued in the
+            // opposite direction, so that it can still reach whatever now lies on the side it came from
             return backward
-                    ? new CursorResult<>(List.of(), cursor.size(), forward(codec, position, resolvedSort), null, true, false)
-                    : CursorResult.empty(cursor.size());
+                    ? new CursorResult<>(List.of(), cursor.size(), reissued(codec, position, resolvedSort, false), null, true, false)
+                    : new CursorResult<>(List.of(), cursor.size(), null, reissued(codec, position, resolvedSort, true), false, true);
         }
 
         // Walking backwards, a following page necessarily exists, since it is the one we come from
@@ -196,16 +199,17 @@ public final class Cursors {
     }
 
     /**
-     * Re-issues the given backward position as a forward one, its keys being the boundary of the page the
-     * consumer walked back from.
+     * Re-issues the given position in the opposite direction, its keys being the boundary of the page the
+     * consumer walked from, so that an emptied page still leads back to it.
      *
      * @param codec        The codec to encode the token with
-     * @param position     The backward position to re-issue, never {@code null} when walking backwards
+     * @param position     The position to re-issue
      * @param resolvedSort The resolved ordering the token is issued for
-     * @return The corresponding forward token
+     * @param backward     The direction to re-issue it in
+     * @return The corresponding token
      */
-    private static String forward(CursorCodec codec, @Nullable CursorPosition position, Sort resolvedSort) {
-        return codec.encode(new CursorPosition(requireNonNull(position).values(), false, fingerprint(resolvedSort)));
+    private static String reissued(CursorCodec codec, CursorPosition position, Sort resolvedSort, boolean backward) {
+        return codec.encode(new CursorPosition(position.values(), backward, fingerprint(resolvedSort)));
     }
 
     private static String token(CursorCodec codec, List<String> keys, boolean backward, String fingerprint) {

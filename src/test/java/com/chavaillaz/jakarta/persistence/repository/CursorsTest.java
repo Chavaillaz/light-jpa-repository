@@ -182,6 +182,20 @@ class CursorsTest {
         }
 
         @Test
+        @DisplayName("keeps a way back when a forward walk lands on an emptied page")
+        void keepsAWayBackFromAnEmptyForwardPage() {
+            // The rows following the position were deleted in between: the consumer is on an empty page it can
+            // only leave backwards, which the mirror token makes possible
+            CursorResult<Bean> result = Cursors.toResult(
+                    CODEC, List.of(), Cursor.first(3, SORT), SORT, position(List.of("Robusta"), false), CursorKeyCodec.DEFAULT);
+
+            assertThat(result.items()).isEmpty();
+            assertThat(result.hasNext()).isFalse();
+            assertThat(result.hasPrevious()).isTrue();
+            assertThat(CODEC.decode(result.previous())).isEqualTo(position(List.of("Robusta"), true));
+        }
+
+        @Test
         @DisplayName("issues tokens bound to the ordering, on the boundary rows")
         void issuesBoundTokens() {
             CursorResult<Bean> result =
