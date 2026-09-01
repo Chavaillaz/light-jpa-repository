@@ -294,6 +294,17 @@ class EntityOrderingTest extends HibernateTest {
                     .withMessageContaining("requires an ordering on plain attributes");
         }
 
+        @Test
+        @DisplayName("rejects the root itself, which names no attribute to order on")
+        void rejectsTheRoot() {
+            CriteriaBuilder builder = entityManager.getCriteriaBuilder();
+            Root<CoffeeEntity> root = builder.createQuery(CoffeeEntity.class).from(CoffeeEntity.class);
+
+            assertThatIllegalArgumentException()
+                    .isThrownBy(() -> EntityOrdering.nameOf(root))
+                    .withMessageContaining("an attribute is required");
+        }
+
     }
 
 }

@@ -60,11 +60,13 @@ public record SortCriterion(
     public static SortCriterion parse(String criterion) {
         // A leading plus sign is decoded as a space by the query parameter decoding, hence the strip
         String value = Objects.toString(criterion, "").strip();
-        boolean ascending = !value.startsWith(DESCENDING_PREFIX);
-        if (value.startsWith(DESCENDING_PREFIX) || value.startsWith(ASCENDING_PREFIX)) {
+        boolean descending = value.startsWith(DESCENDING_PREFIX);
+        if (descending) {
             value = value.substring(DESCENDING_PREFIX.length());
+        } else if (value.startsWith(ASCENDING_PREFIX)) {
+            value = value.substring(ASCENDING_PREFIX.length());
         }
-        return new SortCriterion(value, ascending);
+        return new SortCriterion(value, !descending);
     }
 
     /**

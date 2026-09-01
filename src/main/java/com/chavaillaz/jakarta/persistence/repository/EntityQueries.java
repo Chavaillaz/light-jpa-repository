@@ -90,6 +90,8 @@ public class EntityQueries<E> {
      */
     @SuppressWarnings("unchecked")
     public static <E> EntityQueries<E> of(Class<E> entityType) {
+        // A ClassValue erases the link between the key and the value it computes from it, so the cast cannot be
+        // proven by the compiler; it holds by construction, create building the queries of that very class
         return (EntityQueries<E>) QUERIES.get(entityType);
     }
 
@@ -538,4 +540,3 @@ public class EntityQueries<E> {
     }
 
 }
-

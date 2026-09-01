@@ -23,6 +23,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * Ordering rules of an entity type, resolving the properties exposed by the API into entity attributes and
  * building the ordering of the queries; see {@link Sort} for why the identifier of the entity is always appended.
@@ -79,6 +81,8 @@ public class EntityOrdering<E> {
      */
     @SuppressWarnings("unchecked")
     public static <E> EntityOrdering<E> of(Class<E> entityType) {
+        // A ClassValue erases the link between the key and the value it computes from it, so the cast cannot be
+        // proven by the compiler; it holds by construction, computeValue building the rules of that very class
         return (EntityOrdering<E>) ORDERINGS.get(entityType);
     }
 
@@ -89,7 +93,8 @@ public class EntityOrdering<E> {
      * @return The corresponding property path
      * @throws IllegalArgumentException if the expression is not a plain attribute path, a computed ordering such
      *                                  as {@code lower(name)} being unusable as a cursor key since its value
-     *                                  cannot be read back from the returned entity
+     *                                  cannot be read back from the returned entity, or if it names no attribute
+     *                                  at all, being the root entity itself
      */
     public static String nameOf(Expression<?> expression) {
         Deque<String> names = new ArrayDeque<>();
@@ -98,6 +103,11 @@ public class EntityOrdering<E> {
                 throw new IllegalArgumentException("Cannot use the expression " + expression + " as a cursor key");
             }
             names.addFirst(attribute.getName());
+        }
+        if (names.isEmpty()) {
+            // The expression is the root itself, which has no parent path to walk up and therefore names nothing;
+            // returning the empty path would surface much later, as an invalid sort property with no name in it
+            throw new IllegalArgumentException("Cannot order on the entity " + expression + " itself, an attribute is required");
         }
         return String.join(SortCriterion.NESTING_SEPARATOR, names);
     }
@@ -137,10 +147,11 @@ public class EntityOrdering<E> {
      *
      * @param context The repository the query is written for
      * @param root    The root entity of the query
-     * @param sort    The requested ordering
+     * @param sort    The requested ordering, {@link Sort#NONE} or {@code null} to apply the default ordering of
+     *                the repository
      * @return The ordering to apply
      */
-    public List<Order> buildOrders(RepositoryContext<E> context, Root<E> root, Sort sort) {
+    public List<Order> buildOrders(RepositoryContext<E> context, Root<E> root, @Nullable Sort sort) {
         CriteriaBuilder criteriaBuilder = context.entityManager().getCriteriaBuilder();
 
         List<Order> orders = new ArrayList<>(sort == null || sort.isEmpty()
@@ -254,12 +265,13 @@ public class EntityOrdering<E> {
      * same attribute therefore collapse into one, whichever names them.
      *
      * @param context The repository the query is written for
-     * @param sort    The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
+     * @param sort    The requested ordering, {@link Sort#NONE} or {@code null} to apply the default ordering of
+     *                the repository
      * @return The complete ordering, made of path based criteria only
      * @throws IllegalArgumentException if a criterion refers to an unknown property, to a collection, or if the
      *                                  default ordering of the repository is not expressed with plain paths
      */
-    public Sort resolveSort(RepositoryContext<E> context, Sort sort) {
+    public Sort resolveSort(RepositoryContext<E> context, @Nullable Sort sort) {
         CriteriaBuilder criteriaBuilder = context.entityManager().getCriteriaBuilder();
         // A throwaway root is enough: only the resolved names and directions are kept
         Root<E> root = criteriaBuilder.createQuery(entityType).from(entityType);

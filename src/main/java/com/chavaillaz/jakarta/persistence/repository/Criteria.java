@@ -112,4 +112,3 @@ public interface Criteria<T> {
     Predicate toPredicate(CriteriaBuilder criteriaBuilder, CommonAbstractCriteria query, Root<T> root);
 
 }
-

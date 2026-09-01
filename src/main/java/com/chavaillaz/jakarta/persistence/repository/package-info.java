@@ -35,4 +35,3 @@
 package com.chavaillaz.jakarta.persistence.repository;
 
 import org.jspecify.annotations.NullMarked;
-
