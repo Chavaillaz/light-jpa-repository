@@ -232,14 +232,14 @@ public class EntityOrdering<E> {
      * @throws IllegalArgumentException if the property is unknown or refers to a collection
      */
     public Path<?> resolvePath(RepositoryContext<E> context, Root<E> root, String property) {
-        String[] attributes = Keysets.split(resolveProperty(context, property));
+        String[] attributes = AttributePaths.split(resolveProperty(context, property));
 
         Path<?> path = root;
         for (int index = 0; index < attributes.length; index++) {
             try {
                 // A nested property navigates its association with a left join, so that an entity whose
-                // association is null keeps being returned and counted, see Keysets#step
-                path = Keysets.step(path, attributes[index], index < attributes.length - 1);
+                // association is null keeps being returned and counted, see AttributePaths#step
+                path = AttributePaths.step(path, attributes[index], index < attributes.length - 1);
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("Cannot sort on the unknown property " + property, e);
             }

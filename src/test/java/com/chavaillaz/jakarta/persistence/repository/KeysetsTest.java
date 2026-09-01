@@ -10,7 +10,6 @@ import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.YIRG
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.coffee;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.namesOf;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.roaster;
-import static jakarta.persistence.criteria.JoinType.LEFT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
@@ -64,40 +63,6 @@ class KeysetsTest extends HibernateTest {
     }
 
     @Test
-    @DisplayName("splits a nested path literally, the dot being a regex metacharacter")
-    void splitsANestedPath() {
-        assertThat(Keysets.split("roaster.name")).containsExactly("roaster", "name");
-        assertThat(Keysets.split("name")).containsExactly("name");
-    }
-
-    @Test
-    @DisplayName("resolves a simple and a nested path")
-    void resolvesAPath() {
-        assertThat(EntityOrdering.nameOf(Keysets.path(root, "name"))).isEqualTo("name");
-        assertThat(EntityOrdering.nameOf(Keysets.path(root, "roaster.country"))).isEqualTo("roaster.country");
-    }
-
-    @Test
-    @DisplayName("navigates a nested association with a left join, keeping the entities not having one")
-    void navigatesANestedAssociationWithALeftJoin() {
-        Keysets.path(root, "roaster.name");
-
-        assertThat(root.getJoins()).singleElement().satisfies(join -> {
-            assertThat(join.getAttribute().getName()).isEqualTo(CoffeeEntity_.ROASTER);
-            assertThat(join.getJoinType()).isEqualTo(LEFT);
-        });
-    }
-
-    @Test
-    @DisplayName("reuses the join of an association navigated by several keys, rather than joining it twice")
-    void reusesTheJoinOfANestedAssociation() {
-        Keysets.path(root, "roaster.name");
-        Keysets.path(root, "roaster.country");
-
-        assertThat(root.getJoins()).as("a single join is created and reused").hasSize(1);
-    }
-
-    @Test
     @DisplayName("builds a criterion from the static metamodel, a rename of the attribute then failing the build")
     void buildsACriterionFromTheMetamodel() {
         assertThat(SortCriterion.asc(CoffeeEntity_.name)).isEqualTo(SortCriterion.asc("name"));
@@ -148,7 +113,7 @@ class KeysetsTest extends HibernateTest {
     void rejectsAnUnreadableKey() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> Keysets.valuesOf(coffee(GEISHA), Sort.parse("caffeine"), CursorKeyCodec.DEFAULT))
-                .withMessageContaining("Cannot read the cursor key caffeine");
+                .withMessageContaining("Cannot read the attribute caffeine");
     }
 
     @Test

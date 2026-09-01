@@ -19,6 +19,11 @@
  * {@code AbstractRepository} exposes. Dynamic RSQL filtering is not part of this package: it is an optional
  * extension provided by the sibling {@code rsql-jpa-repository} artifact, built on top of the same collaborators.
  * <p>
+ * Naming an attribute by its dotted path, such as {@code roaster.name}, is the concern of
+ * {@link com.chavaillaz.jakarta.persistence.repository.AttributePaths}, which every ordering resolves through,
+ * whichever pagination asks for it, so that a nested path is walked, joined and read back exactly the same way
+ * everywhere.
+ * <p>
  * The keyset (cursor) pagination additionally relies on {@link com.chavaillaz.jakarta.persistence.repository.Keysets}
  * to build the seek predicate and the {@code ORDER BY} clause from a resolved ordering, and on
  * {@link com.chavaillaz.jakarta.persistence.repository.CursorCodec} to turn the boundary keys into the opaque

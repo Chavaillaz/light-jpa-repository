@@ -516,7 +516,7 @@ public class EntityQueries<E> {
     protected void selectKeysAlongside(CriteriaQuery<Tuple> query, Root<E> root, List<String> properties) {
         List<Selection<?>> selections = new ArrayList<>(properties.size() + 1);
         selections.add(root);
-        properties.forEach(property -> selections.add(Keysets.path(root, property)));
+        properties.forEach(property -> selections.add(AttributePaths.path(root, property)));
         query.multiselect(selections);
     }
 
