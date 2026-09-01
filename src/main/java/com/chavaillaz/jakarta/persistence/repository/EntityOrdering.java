@@ -17,6 +17,7 @@ import jakarta.persistence.metamodel.SingularAttribute;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -246,6 +247,11 @@ public class EntityOrdering<E> {
      * The returned ordering is what both the {@code ORDER BY} clause and the seek predicate are built from, so that
      * they can never drift apart and silently return wrong pages. The criteria are expressed as entity attribute
      * paths, already validated by {@link #resolvePath(RepositoryContext, Root, String)}.
+     * <p>
+     * A property is only kept once, the first occurrence winning as the database itself does: a second comparison
+     * on a property cannot discriminate two rows the first one already left equal, and each redundant key would
+     * still be selected, sought on and carried within every cursor token. Two public properties aliasing the very
+     * same attribute therefore collapse into one, whichever names them.
      *
      * @param context The repository the query is written for
      * @param sort    The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
@@ -258,25 +264,36 @@ public class EntityOrdering<E> {
         // A throwaway root is enough: only the resolved names and directions are kept
         Root<E> root = criteriaBuilder.createQuery(entityType).from(entityType);
 
-        List<SortCriterion> criteria = new ArrayList<>();
+        // Keyed by the resolved attribute path, so that the first criterion naming it wins and the insertion
+        // order, which is the order of precedence, is preserved
+        Map<String, SortCriterion> criteria = new LinkedHashMap<>();
         if (sort == null || sort.isEmpty()) {
             for (Order order : context.defaultOrders(criteriaBuilder, root)) {
-                criteria.add(new SortCriterion(nameOf(order.getExpression()), order.isAscending()));
+                keep(criteria, new SortCriterion(nameOf(order.getExpression()), order.isAscending()));
             }
         } else {
             for (SortCriterion criterion : sort.criteria()) {
-                criteria.add(new SortCriterion(nameOf(resolvePath(context, root, criterion.property())), criterion.ascending()));
+                keep(criteria, new SortCriterion(nameOf(resolvePath(context, root, criterion.property())), criterion.ascending()));
             }
         }
 
-        // The identifier is only appended when it is not already part of the ordering
-        Set<String> ordered = criteria.stream().map(SortCriterion::property).collect(toSet());
+        // The identifier is appended so that the ordering is unique, unless it already is part of it, in which
+        // case the direction the repository or the consumer asked for is the one that stands
         getIdPaths(context, root)
                 .map(EntityOrdering::nameOf)
-                .filter(property -> !ordered.contains(property))
                 .map(SortCriterion::asc)
-                .forEach(criteria::add);
-        return new Sort(criteria);
+                .forEach(criterion -> keep(criteria, criterion));
+        return new Sort(List.copyOf(criteria.values()));
+    }
+
+    /**
+     * Keeps a criterion unless the ordering already compares its property.
+     *
+     * @param criteria  The criteria resolved so far, keyed by their property
+     * @param criterion The criterion to keep
+     */
+    private static void keep(Map<String, SortCriterion> criteria, SortCriterion criterion) {
+        criteria.putIfAbsent(criterion.property(), criterion);
     }
 
     /**

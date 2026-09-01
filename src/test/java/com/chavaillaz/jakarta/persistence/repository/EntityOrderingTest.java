@@ -192,6 +192,23 @@ class EntityOrderingTest extends HibernateTest {
         }
 
         @Test
+        @DisplayName("keeps a property once, the first criterion naming it winning")
+        void keepsAPropertyOnce() {
+            assertThat(ordering().resolveSort(openContext(), Sort.parse("name,name")).toString()).isEqualTo("name,id");
+            assertThat(ordering().resolveSort(openContext(), Sort.parse("-price,name,price")).toString())
+                    .isEqualTo("-price,name,id");
+        }
+
+        @Test
+        @DisplayName("collapses two public properties aliasing the very same attribute")
+        void collapsesTwoAliasesOfTheSameAttribute() {
+            RepositoryContext<CoffeeEntity> context = context(Map.of("brewer", "roaster.name", "roaster", "roaster.name"), BY_NAME);
+
+            assertThat(ordering().resolveSort(context, Sort.parse("brewer,roaster")).toString())
+                    .isEqualTo("roaster.name,id");
+        }
+
+        @Test
         @DisplayName("spreads an embedded identifier over its components, ordered by name")
         void spreadsAnEmbeddedIdentifier() {
             RepositoryContext<BeanBatchEntity> context =
