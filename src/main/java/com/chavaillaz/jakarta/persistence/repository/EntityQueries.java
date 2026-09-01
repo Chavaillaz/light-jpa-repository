@@ -113,8 +113,19 @@ public class EntityQueries<E> {
      * @param predicate       The predicate to append
      */
     protected static void restrict(CriteriaBuilder criteriaBuilder, CriteriaQuery<?> query, Predicate predicate) {
-        Predicate existing = query.getRestriction();
-        query.where(existing == null ? predicate : criteriaBuilder.and(existing, predicate));
+        query.where(and(criteriaBuilder, query.getRestriction(), predicate));
+    }
+
+    /**
+     * Combines two predicates, the first one being possibly absent.
+     *
+     * @param criteriaBuilder The builder to combine the predicates with
+     * @param existing        The predicate to combine with, or {@code null}
+     * @param predicate       The predicate to append
+     * @return The combined predicate
+     */
+    protected static Predicate and(CriteriaBuilder criteriaBuilder, @Nullable Predicate existing, Predicate predicate) {
+        return existing == null ? predicate : criteriaBuilder.and(existing, predicate);
     }
 
     /**
@@ -239,6 +250,37 @@ public class EntityQueries<E> {
     }
 
     /**
+     * Combines the given restriction and additional criteria into the predicate restricting a query, either one
+     * being possibly absent.
+     * <p>
+     * This is what every query but the paginated search is restricted with, so that a restriction and a criteria
+     * are combined the very same way whether the query counts, checks an existence, scrolls or deletes.
+     *
+     * @param criteriaBuilder The builder to use
+     * @param query           The query being built, to create the subqueries of the criteria from
+     * @param root            The root entity of the query
+     * @param restriction     The restriction to apply, or {@code null}
+     * @param criteria        The additional criteria to apply, or {@code null}
+     * @return The corresponding predicate, or {@code null} when neither is given, the query then matching every
+     * entity
+     */
+    protected @Nullable Predicate toPredicate(
+            CriteriaBuilder criteriaBuilder,
+            CommonAbstractCriteria query,
+            Root<E> root,
+            @Nullable Restriction<? super E> restriction,
+            @Nullable Criteria<E> criteria) {
+        Predicate predicate = null;
+        if (restriction != null) {
+            predicate = restriction.toPredicate(root, criteriaBuilder);
+        }
+        if (criteria != null) {
+            predicate = and(criteriaBuilder, predicate, criteria.toPredicate(criteriaBuilder, query, root));
+        }
+        return predicate;
+    }
+
+    /**
      * Searches for the entities matching the given restriction and additional criteria.
      *
      * @param context     The repository the query is written for
@@ -320,11 +362,9 @@ public class EntityQueries<E> {
         Root<E> root = query.from(entityType);
         query.select(criteriaBuilder.literal(1));
 
-        if (restriction != null) {
-            restrict(criteriaBuilder, query, restriction.toPredicate(root, criteriaBuilder));
-        }
-        if (criteria != null) {
-            restrict(criteriaBuilder, query, criteria.toPredicate(criteriaBuilder, query, root));
+        Predicate predicate = toPredicate(criteriaBuilder, query, root, restriction, criteria);
+        if (predicate != null) {
+            query.where(predicate);
         }
 
         // No ordering is applied, the question being whether a row exists and not which one comes first, and a
@@ -356,14 +396,7 @@ public class EntityQueries<E> {
         CriteriaDelete<E> delete = criteriaBuilder.createCriteriaDelete(entityType);
         Root<E> root = delete.from(entityType);
 
-        Predicate predicate = null;
-        if (restriction != null) {
-            predicate = restriction.toPredicate(root, criteriaBuilder);
-        }
-        if (criteria != null) {
-            Predicate additional = criteria.toPredicate(criteriaBuilder, delete, root);
-            predicate = predicate == null ? additional : criteriaBuilder.and(predicate, additional);
-        }
+        Predicate predicate = toPredicate(criteriaBuilder, delete, root, restriction, criteria);
         if (predicate != null) {
             delete.where(predicate);
         }
@@ -438,17 +471,11 @@ public class EntityQueries<E> {
         CriteriaQuery<Tuple> query = criteriaBuilder.createTupleQuery();
         Root<E> root = query.from(entityType);
 
-        Predicate predicate = null;
-        if (joinsCollection(context, restriction, criteria)) {
-            predicate = semiJoin(criteriaBuilder, query, root, restriction, criteria);
-        } else {
-            if (restriction != null) {
-                predicate = restriction.toPredicate(root, criteriaBuilder);
-            }
-            if (criteria != null) {
-                predicate = and(criteriaBuilder, predicate, criteria.toPredicate(criteriaBuilder, query, root));
-            }
-        }
+        // A restriction or a criteria joining a collection is moved into a semi join, which keeps the boundary row
+        // from being duplicated and therefore the page from being silently shortened
+        Predicate predicate = joinsCollection(context, restriction, criteria)
+                ? semiJoin(criteriaBuilder, query, root, restriction, criteria)
+                : toPredicate(criteriaBuilder, query, root, restriction, criteria);
         if (position != null) {
             predicate = and(criteriaBuilder, predicate, Keysets.seek(criteriaBuilder, root, direction, position.values(), context.cursorKeyCodec()));
         }
@@ -456,13 +483,7 @@ public class EntityQueries<E> {
             query.where(predicate);
         }
 
-        // The entity is selected alongside the very columns the ordering compares, so that the keys travelling
-        // within the tokens are the values the database ordered on, and not what an accessor of the entity
-        // happens to return for them
-        List<Selection<?>> selections = new ArrayList<>();
-        selections.add(root);
-        keyProperties.forEach(property -> selections.add(Keysets.path(root, property)));
-        query.multiselect(selections);
+        selectKeysAlongside(query, root, keyProperties);
         query.orderBy(Keysets.toOrders(criteriaBuilder, root, direction));
 
         List<Tuple> rows = context.entityManager().createQuery(query)
@@ -479,9 +500,28 @@ public class EntityQueries<E> {
     }
 
     /**
+     * Selects the entity alongside the very columns the ordering compares, so that the keys travelling within the
+     * tokens are the values the database ordered on, and not what an accessor of the entity happens to return for
+     * them.
+     * <p>
+     * The entity occupies the first element of each row, the keys following it in the ordering order, which is
+     * what {@link #keysOf(RepositoryContext, Tuple, List)} reads them back with.
+     *
+     * @param query      The cursor query being built
+     * @param root       The root entity of the query
+     * @param properties The ordering properties, in the order they are compared in
+     */
+    protected void selectKeysAlongside(CriteriaQuery<Tuple> query, Root<E> root, List<String> properties) {
+        List<Selection<?>> selections = new ArrayList<>(properties.size() + 1);
+        selections.add(root);
+        properties.forEach(property -> selections.add(Keysets.path(root, property)));
+        query.multiselect(selections);
+    }
+
+    /**
      * Formats the ordering keys the query returned alongside an entity into their textual representation.
      *
-     * @param context     The repository the query is written for
+     * @param context    The repository the query is written for
      * @param row        The fetched row, whose first element is the entity and whose others are the keys
      * @param properties The ordering properties, in the order they were selected in
      * @return The textual keys, in the ordering order
@@ -495,18 +535,6 @@ public class EntityQueries<E> {
             keys.add(context.cursorKeyCodec().format(properties.get(index), row.get(index + 1)));
         }
         return keys;
-    }
-
-    /**
-     * Combines two predicates, the first one being possibly absent.
-     *
-     * @param criteriaBuilder The builder to combine the predicates with
-     * @param existing        The predicate to combine with, or {@code null}
-     * @param predicate       The predicate to append
-     * @return The combined predicate
-     */
-    protected static Predicate and(CriteriaBuilder criteriaBuilder, @Nullable Predicate existing, Predicate predicate) {
-        return existing == null ? predicate : criteriaBuilder.and(existing, predicate);
     }
 
 }
