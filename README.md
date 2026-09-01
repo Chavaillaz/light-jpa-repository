@@ -277,7 +277,14 @@ PaginationResult<CoffeeEntity> page = coffeeRepository.findAll(pageable);
 ```
 
 `Pageable.UNPAGED` (or the `page`/`size` overloads with a `null`) returns every matching entity as a single page,
-still following the requested ordering.
+still following the requested ordering. A coordinate that cannot address a page — a missing one, a negative page
+number or a non-positive size — is normalized to `Pageable.NO_PAGINATION`, so a repository never has to tell an
+absent query parameter from an invalid one. For the endpoints that paginate by default, `orDefault(page, size)`
+fills in both cases:
+
+```java
+Pageable pageable = Pageable.of(page, size, Sort.parse("-price")).orDefault(0, 20);
+```
 
 ### Cursor (keyset) pagination
 

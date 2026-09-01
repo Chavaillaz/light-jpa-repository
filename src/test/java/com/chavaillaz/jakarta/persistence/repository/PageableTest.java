@@ -23,8 +23,22 @@ class PageableTest {
     void exposesAnUnpagedSingleton() {
         assertThat(Pageable.unpaged()).isSameAs(Pageable.UNPAGED);
         assertThat(Pageable.UNPAGED.isPaginated()).isFalse();
-        assertThat(Pageable.UNPAGED.page()).isNull();
-        assertThat(Pageable.UNPAGED.size()).isNull();
+        assertThat(Pageable.UNPAGED.page()).isEqualTo(Pageable.NO_PAGINATION);
+        assertThat(Pageable.UNPAGED.size()).isEqualTo(Pageable.NO_PAGINATION);
+    }
+
+    @Test
+    @DisplayName("normalizes a missing and an invalid coordinate to the very same value")
+    void normalizesTheCoordinates() {
+        assertThat(Pageable.of(null, null)).isEqualTo(Pageable.of(-1, 0));
+        assertThat(Pageable.of(-3, 10).page()).isEqualTo(Pageable.NO_PAGINATION);
+        assertThat(Pageable.of(0, -5).size()).isEqualTo(Pageable.NO_PAGINATION);
+    }
+
+    @Test
+    @DisplayName("caps the requested size, so that a single call cannot drain the table")
+    void capsTheRequestedSize() {
+        assertThat(Pageable.of(0, Pageable.MAX_SIZE + 1).size()).isEqualTo(Pageable.MAX_SIZE);
     }
 
     @ParameterizedTest(name = "page {0} of size {1} is paginated: {2}")
@@ -73,10 +87,18 @@ class PageableTest {
     }
 
     @Test
-    @DisplayName("does not repair an invalid page number, which simply disables the pagination")
-    void doesNotRepairAnInvalidPage() {
-        assertThat(Pageable.of(-1, 10).orDefault(0, 20).page()).isEqualTo(-1);
-        assertThat(Pageable.of(-1, 10).orDefault(0, 20).isPaginated()).isFalse();
+    @DisplayName("replaces an invalid coordinate as it replaces a missing one, rather than returning everything")
+    void repairsAnInvalidCoordinate() {
+        assertThat(Pageable.of(-1, 10).orDefault(0, 20)).isEqualTo(Pageable.of(0, 10));
+        assertThat(Pageable.of(3, 0).orDefault(0, 20)).isEqualTo(Pageable.of(3, 20));
+        assertThat(Pageable.of(-1, 10).orDefault(0, 20).isPaginated()).isTrue();
+    }
+
+    @Test
+    @DisplayName("stays unpaged when no default is asked for, whatever the coordinates")
+    void staysUnpagedWithoutADefault() {
+        assertThat(Pageable.of(-1, 10).isPaginated()).isFalse();
+        assertThat(Pageable.of(3, null).isPaginated()).isFalse();
     }
 
 }
