@@ -91,6 +91,11 @@ public final class Keysets {
      */
     public static Predicate seek(CriteriaBuilder criteriaBuilder, From<?, ?> root, Sort sort, List<String> values, CursorKeyCodec codec) {
         List<SortCriterion> criteria = sort.criteria();
+        if (criteria.isEmpty()) {
+            // An empty disjunction is false, so seeking on no ordering at all would silently return no row rather
+            // than the page the consumer asked for; a resolved ordering always holds the identifier at least
+            throw new IllegalArgumentException("Cannot seek without an ordering to compare the boundary row against");
+        }
         if (criteria.size() != values.size()) {
             throw new IllegalArgumentException("The cursor does not match the requested ordering");
         }

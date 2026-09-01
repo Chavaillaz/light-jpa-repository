@@ -160,6 +160,14 @@ class KeysetsTest extends HibernateTest {
     }
 
     @Test
+    @DisplayName("rejects an empty ordering, which would silently keep no row at all")
+    void rejectsAnEmptyOrdering() {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> Keysets.seek(builder, root, Sort.NONE, List.of(), CursorKeyCodec.DEFAULT))
+                .withMessageContaining("without an ordering");
+    }
+
+    @Test
     @DisplayName("builds a lexicographic seek predicate honouring each direction")
     void buildsTheSeekPredicate() {
         Map<String, CoffeeEntity> menu = inTransaction(Coffees::persistMenu);

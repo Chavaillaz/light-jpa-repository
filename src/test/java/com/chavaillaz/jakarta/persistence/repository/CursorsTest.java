@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -186,6 +189,59 @@ class CursorsTest {
 
             assertThat(CODEC.decode(result.next())).isEqualTo(position(List.of("Robusta"), false));
             assertThat(CODEC.decode(result.previous())).isEqualTo(position(List.of("Arabica"), true));
+        }
+
+    }
+
+    @Nested
+    @DisplayName("walking the pages as a stream")
+    class Walk {
+
+        private CursorResult<Bean> page(List<Bean> items, @Nullable String next) {
+            return new CursorResult<>(items, 2, next, null, next != null, false);
+        }
+
+        @Test
+        @DisplayName("fetches nothing until the stream is consumed")
+        void fetchesNothingUntilConsumed() {
+            AtomicInteger fetched = new AtomicInteger();
+
+            Stream<Bean> stream = Cursors.stream(cursor -> {
+                fetched.incrementAndGet();
+                return page(BEANS.subList(0, 2), null);
+            }, SORT, 2);
+
+            assertThat(fetched).as("not even the first page is fetched on the call").hasValue(0);
+            assertThat(stream.toList()).hasSize(2);
+            assertThat(fetched).hasValue(1);
+        }
+
+        @Test
+        @DisplayName("fetches only the pages a short circuiting operation needs")
+        void fetchesOnlyTheNeededPages() {
+            AtomicInteger fetched = new AtomicInteger();
+
+            List<Bean> walked = Cursors.stream(cursor -> {
+                fetched.incrementAndGet();
+                return page(BEANS.subList(0, 2), "more");
+            }, SORT, 2).limit(3).toList();
+
+            assertThat(walked).hasSize(3);
+            assertThat(fetched).as("the third item comes from the second page, the third one is never asked for").hasValue(2);
+        }
+
+        @Test
+        @DisplayName("stops on a page announcing a successor it hands no token for, instead of walking forever")
+        void stopsOnAMissingToken() {
+            AtomicInteger fetched = new AtomicInteger();
+
+            List<Bean> walked = Cursors.stream(cursor -> {
+                fetched.incrementAndGet();
+                return new CursorResult<>(BEANS.subList(0, 2), 2, null, null, true, false);
+            }, SORT, 2).toList();
+
+            assertThat(walked).hasSize(2);
+            assertThat(fetched).as("requesting the same page again would restart the walk from the first one").hasValue(1);
         }
 
     }

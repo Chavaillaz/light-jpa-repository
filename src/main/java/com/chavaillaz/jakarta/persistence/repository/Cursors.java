@@ -159,9 +159,30 @@ public final class Cursors {
      * @return The lazy stream of every matching item, in the requested ordering
      */
     public static <T> Stream<T> stream(Function<Cursor, CursorResult<T>> pages, Sort sort, int pageSize) {
-        CursorResult<T> first = pages.apply(Cursor.first(pageSize, sort));
-        return Stream.iterate(first, Objects::nonNull, page -> page.hasNext() ? pages.apply(Cursor.of(page.next(), pageSize, sort)) : null)
+        // The whole walk hangs off a single element, so that not even the first page is fetched before the stream
+        // is consumed: Stream.iterate evaluates its seed eagerly, which would query on the mere call
+        return Stream.of(Cursor.first(pageSize, sort))
+                .flatMap(first -> Stream.iterate(pages.apply(first), Objects::nonNull, page -> following(pages, page, sort, pageSize)))
                 .flatMap(page -> page.items().stream());
+    }
+
+    /**
+     * Fetches the page following the given one, or {@code null} when the walk is over.
+     *
+     * @param <T>      The type of the returned items
+     * @param pages    The page fetcher, which is the cursor query being walked
+     * @param page     The page the walk has reached
+     * @param sort     The requested ordering
+     * @param pageSize The number of items fetched per underlying page
+     * @return The following page, or {@code null} when the given one is the last
+     */
+    private static <T> @Nullable CursorResult<T> following(Function<Cursor, CursorResult<T>> pages, CursorResult<T> page, Sort sort, int pageSize) {
+        // The token is what makes the walk progress: a page announcing a successor without handing one over would
+        // otherwise be requested as a first page again, and the walk would never terminate
+        if (!page.hasNext() || page.next() == null) {
+            return null;
+        }
+        return pages.apply(Cursor.of(page.next(), pageSize, sort));
     }
 
     /**
