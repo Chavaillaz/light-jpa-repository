@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiFunction;
-import java.util.function.Function;
 
 import org.hibernate.query.restriction.Restriction;
 import org.junit.jupiter.api.BeforeAll;
@@ -51,35 +50,33 @@ class EntityQueriesTest extends HibernateTest {
         runInTransaction(Coffees::persistMenu);
     }
 
-    private <T> T withQueries(Function<EntityQueries<CoffeeEntity>, T> action) {
-        return inTransaction(entityManager -> {
-            EntityOrdering<CoffeeEntity> ordering = new EntityOrdering<>(entityManager, CoffeeEntity.class, BY_NAME, Map::of);
-            return action.apply(new EntityQueries<>(entityManager, CoffeeEntity.class, ordering, CursorCodec.DEFAULT, CursorKeyCodec.DEFAULT));
-        });
+    private <T> T withQueries(BiFunction<EntityQueries<CoffeeEntity>, RepositoryContext<CoffeeEntity>, T> action) {
+        return inTransaction(entityManager ->
+                action.apply(EntityQueries.of(CoffeeEntity.class), new TestContext<>(entityManager, BY_NAME, Map.of())));
     }
 
     @Test
     @DisplayName("treats a null restriction as unrestricted")
     void treatsNullAsUnrestricted() {
-        assertThat((long) withQueries(queries -> queries.count(null, null))).isEqualTo(7);
-        assertThat((long) withQueries(queries -> queries.count(unrestricted(), null))).isEqualTo(7);
+        assertThat((long) withQueries((queries, context) -> queries.count(context, null, null))).isEqualTo(7);
+        assertThat((long) withQueries((queries, context) -> queries.count(context, unrestricted(), null))).isEqualTo(7);
     }
 
     @Test
     @DisplayName("combines the restriction and the criteria")
     void combinesTheRestrictionAndTheCriteria() {
-        List<CoffeeEntity> coffees = withQueries(queries -> queries
-                .search(equal(CoffeeEntity_.origin, ETHIOPIA), tasting("Citrus"), Pageable.UNPAGED)
+        List<CoffeeEntity> coffees = withQueries((queries, context) -> queries
+                .search(context, equal(CoffeeEntity_.origin, ETHIOPIA), tasting("Citrus"), Pageable.UNPAGED)
                 .items());
 
         assertThat(namesOf(coffees)).containsExactly(SIDAMO, YIRGACHEFFE);
-        assertThat((long) withQueries(queries -> queries.count(equal(CoffeeEntity_.origin, ETHIOPIA), tasting("Citrus")))).isEqualTo(2);
+        assertThat((long) withQueries((queries, context) -> queries.count(context, equal(CoffeeEntity_.origin, ETHIOPIA), tasting("Citrus")))).isEqualTo(2);
     }
 
     @Test
     @DisplayName("counts from the very same query as the results")
     void countsFromTheSameQuery() {
-        PaginationResult<CoffeeEntity> result = withQueries(queries -> queries.search(equal(CoffeeEntity_.roast, Roast.LIGHT), null, Pageable.of(0, 1)));
+        PaginationResult<CoffeeEntity> result = withQueries((queries, context) -> queries.search(context, equal(CoffeeEntity_.roast, Roast.LIGHT), null, Pageable.of(0, 1)));
 
         assertThat(result.items()).hasSize(1);
         assertThat(result.totalItems()).isEqualTo(3);
@@ -88,7 +85,7 @@ class EntityQueriesTest extends HibernateTest {
     @Test
     @DisplayName("returns everything as a single page when unpaged")
     void returnsASinglePage() {
-        PaginationResult<CoffeeEntity> result = withQueries(queries -> queries.search(null, null, Pageable.UNPAGED));
+        PaginationResult<CoffeeEntity> result = withQueries((queries, context) -> queries.search(context, null, null, Pageable.UNPAGED));
 
         assertThat(result.items()).hasSize(7);
         assertThat(result.totalItems()).isEqualTo(7);
@@ -97,22 +94,22 @@ class EntityQueriesTest extends HibernateTest {
     @Test
     @DisplayName("fetches only the first row of the first method")
     void fetchesOnlyTheFirstRow() {
-        assertThat((Optional<CoffeeEntity>) withQueries(queries -> queries.first(null, null, Sort.parse("-price"))))
+        assertThat((Optional<CoffeeEntity>) withQueries((queries, context) -> queries.first(context, null, null, Sort.parse("-price"))))
                 .hasValueSatisfying(coffee -> assertThat(coffee.getName()).isEqualTo(GEISHA));
-        assertThat((Optional<CoffeeEntity>) withQueries(queries -> queries.first(null, null, Sort.NONE)))
+        assertThat((Optional<CoffeeEntity>) withQueries((queries, context) -> queries.first(context, null, null, Sort.NONE)))
                 .as("the default ordering applies when none is requested")
                 .hasValueSatisfying(coffee -> assertThat(coffee.getName()).isEqualTo(BLUE_MOUNTAIN));
-        assertThat((Optional<CoffeeEntity>) withQueries(queries -> queries.first(equal(CoffeeEntity_.origin, "Mars"), null, Sort.NONE)))
+        assertThat((Optional<CoffeeEntity>) withQueries((queries, context) -> queries.first(context, equal(CoffeeEntity_.origin, "Mars"), null, Sort.NONE)))
                 .isEmpty();
     }
 
     @Test
     @DisplayName("searches a related type")
     void searchesARelatedType() {
-        List<TastingNoteEntity> notes = withQueries(queries -> queries.search(TastingNoteEntity.class, null));
+        List<TastingNoteEntity> notes = withQueries((queries, context) -> queries.search(context, TastingNoteEntity.class, null));
         assertThat(notes).hasSize(9);
 
-        List<RoasterEntity> roasters = withQueries(queries -> queries.search(RoasterEntity.class, equal(RoasterEntity_.country, ETHIOPIA)));
+        List<RoasterEntity> roasters = withQueries((queries, context) -> queries.search(context, RoasterEntity.class, equal(RoasterEntity_.country, ETHIOPIA)));
         assertThat(roasters).extracting(RoasterEntity::getName).containsExactly("Kaldi Roasting");
     }
 
@@ -122,11 +119,11 @@ class EntityQueriesTest extends HibernateTest {
         Restriction<CoffeeEntity> ethiopian = equal(CoffeeEntity_.origin, ETHIOPIA);
         Criteria<CoffeeEntity> citrus = tasting("Citrus");
 
-        CursorResult<CoffeeEntity> first = withQueries(queries -> queries.scroll(ethiopian, citrus, Cursor.first(1, Sort.NONE)));
+        CursorResult<CoffeeEntity> first = withQueries((queries, context) -> queries.scroll(context, ethiopian, citrus, Cursor.first(1, Sort.NONE)));
         assertThat(Coffees.namesOf(first)).containsExactly(SIDAMO);
         assertThat(first.hasNext()).isTrue();
 
-        CursorResult<CoffeeEntity> second = withQueries(queries -> queries.scroll(ethiopian, citrus, Cursor.of(first.next(), 1, Sort.NONE)));
+        CursorResult<CoffeeEntity> second = withQueries((queries, context) -> queries.scroll(context, ethiopian, citrus, Cursor.of(first.next(), 1, Sort.NONE)));
         assertThat(Coffees.namesOf(second)).containsExactly(YIRGACHEFFE);
         assertThat(second.hasNext()).isFalse();
         assertThat(second.hasPrevious()).isTrue();
@@ -136,7 +133,7 @@ class EntityQueriesTest extends HibernateTest {
     @DisplayName("rejects an ordering on an unknown property")
     void rejectsAnUnknownOrdering() {
         assertThatIllegalArgumentException()
-                .isThrownBy(() -> withQueries(queries -> queries.search(null, null, Pageable.of(0, 3, Sort.parse("caffeine")))))
+                .isThrownBy(() -> withQueries((queries, context) -> queries.search(context, null, null, Pageable.of(0, 3, Sort.parse("caffeine")))))
                 .withMessageContaining("unknown property caffeine");
     }
 

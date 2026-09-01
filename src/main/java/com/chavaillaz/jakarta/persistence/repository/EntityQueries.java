@@ -3,7 +3,6 @@ package com.chavaillaz.jakarta.persistence.repository;
 import static com.chavaillaz.jakarta.persistence.repository.Pageables.toPage;
 import static org.hibernate.query.restriction.Restriction.unrestricted;
 
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.Tuple;
 import jakarta.persistence.criteria.CommonAbstractCriteria;
@@ -26,9 +25,12 @@ import org.hibernate.query.specification.SelectionSpecification;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Typed queries of a repository, built from the Hibernate {@link Restriction restrictions}, which are checked at
+ * Typed queries of an entity type, built from the Hibernate {@link Restriction restrictions}, which are checked at
  * compile time against the static metamodel, and from the additional {@link Criteria criteria}, which express what
  * the restrictions cannot, such as the correlated subqueries.
+ * <p>
+ * One instance is shared by every repository over the same entity: what belongs to the repository a query is
+ * written for travels with the {@link RepositoryContext} handed over at each call.
  * <p>
  * The total number of matching items is always derived from the very same query as the results, so that the count
  * can never drift away from them, as it does when both are written as two separate queries.
@@ -38,9 +40,18 @@ import org.jspecify.annotations.Nullable;
 public class EntityQueries<E> {
 
     /**
-     * The entity manager the queries are created from.
+     * The query support, held per entity type rather than per repository, nothing of a repository being kept
+     * here. A {@link ClassValue} is used rather than a plain map keyed by the class, so that the cache cannot
+     * hold a class, and therefore its class loader, alive after a redeployment.
      */
-    protected final EntityManager entityManager;
+    private static final ClassValue<EntityQueries<?>> QUERIES = new ClassValue<>() {
+
+        @Override
+        protected EntityQueries<?> computeValue(Class<?> type) {
+            return create(type);
+        }
+
+    };
 
     /**
      * The type of the managed entity.
@@ -48,35 +59,50 @@ public class EntityQueries<E> {
     protected final Class<E> entityType;
 
     /**
-     * The ordering rules of the repository.
+     * The ordering rules of the entity type.
      */
     protected final EntityOrdering<E> ordering;
 
     /**
-     * The codec of the cursor tokens.
-     */
-    protected final CursorCodec cursorCodec;
-
-    /**
-     * The codec of the cursor key values.
-     */
-    protected final CursorKeyCodec cursorKeyCodec;
-
-    /**
-     * Creates the queries of a repository.
+     * Creates the queries of an entity type.
+     * <p>
+     * Prefer {@link #of(Class)}, which shares one instance per entity type.
      *
-     * @param entityManager  The entity manager to use
-     * @param entityType     The type of the managed entity
-     * @param ordering       The ordering rules of the repository
-     * @param cursorCodec    The codec of the cursor tokens
-     * @param cursorKeyCodec The codec of the cursor key values
+     * @param entityType The type of the managed entity
+     * @param ordering   The ordering rules of the entity type
      */
-    public EntityQueries(EntityManager entityManager, Class<E> entityType, EntityOrdering<E> ordering, CursorCodec cursorCodec, CursorKeyCodec cursorKeyCodec) {
-        this.entityManager = entityManager;
+    public EntityQueries(Class<E> entityType, EntityOrdering<E> ordering) {
         this.entityType = entityType;
         this.ordering = ordering;
-        this.cursorCodec = cursorCodec;
-        this.cursorKeyCodec = cursorKeyCodec;
+    }
+
+    /**
+     * Gets the queries of the given entity type.
+     * <p>
+     * The instance is shared by every repository over that entity, which is possible precisely because it holds
+     * nothing of any of them: the entity manager, the ordering hooks and the cursor codecs travel with the
+     * {@link RepositoryContext} of each call. Nothing is therefore built per repository, and no entity manager,
+     * which is bound to a transaction, is ever captured.
+     *
+     * @param <E>        The type of the managed entity
+     * @param entityType The type of the managed entity
+     * @return The corresponding queries
+     */
+    @SuppressWarnings("unchecked")
+    public static <E> EntityQueries<E> of(Class<E> entityType) {
+        return (EntityQueries<E>) QUERIES.get(entityType);
+    }
+
+    /**
+     * Creates the queries of an entity type, the type parameter being captured so that the entity type and its
+     * ordering rules are known to be the very same one.
+     *
+     * @param <T>        The type of the managed entity
+     * @param entityType The type of the managed entity
+     * @return The corresponding queries
+     */
+    private static <T> EntityQueries<T> create(Class<T> entityType) {
+        return new EntityQueries<>(entityType, EntityOrdering.of(entityType));
     }
 
     /**
@@ -109,9 +135,10 @@ public class EntityQueries<E> {
      * criteria or by the default ones.
      * <p>
      * The ordering is applied through an augmentation, so that it relies on the very same
-     * {@link EntityOrdering#buildOrders(jakarta.persistence.criteria.Root, Sort) criteria logic} as the other
+     * {@link EntityOrdering#buildOrders(RepositoryContext, jakarta.persistence.criteria.Root, Sort) criteria logic} as the other
      * queries of the repository, the ordering rules being therefore defined only once.
      *
+     * @param context     The repository the query is written for
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
      *                    the entities
      * @param criteria    The additional criteria to apply, or {@code null}
@@ -119,8 +146,8 @@ public class EntityQueries<E> {
      * @return The corresponding query
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      */
-    public SelectionQuery<E> createQuery(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort) {
-        boolean semiJoined = joinsCollection(restriction, criteria);
+    public SelectionQuery<E> createQuery(RepositoryContext<E> context, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort) {
+        boolean semiJoined = joinsCollection(context, restriction, criteria);
 
         return SelectionSpecification.create(entityType)
                 // A restriction joining a collection is moved into the semi join below, and must therefore not be
@@ -134,9 +161,9 @@ public class EntityQueries<E> {
                         // the given one matches every entity
                         restrict(criteriaBuilder, query, criteria.toPredicate(criteriaBuilder, query, root));
                     }
-                    query.orderBy(ordering.buildOrders(root, sort));
+                    query.orderBy(ordering.buildOrders(context, root, sort));
                 })
-                .createQuery(entityManager);
+                .createQuery(context.entityManager());
     }
 
     /**
@@ -146,16 +173,17 @@ public class EntityQueries<E> {
      * The predicates are built against a throwaway root, which is the only way to know what they join: they are
      * opaque until they are applied. Nothing but criteria nodes is created, no query reaching the database.
      *
+     * @param context     The repository the query is written for
      * @param restriction The restriction to inspect, or {@code null}
      * @param criteria    The criteria to inspect, or {@code null}
      * @return {@code true} if applying them to a root would join a collection, {@code false} otherwise
      */
-    protected boolean joinsCollection(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
+    protected boolean joinsCollection(RepositoryContext<E> context, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
         if (restriction == null && criteria == null) {
             return false;
         }
 
-        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+        CriteriaBuilder criteriaBuilder = context.entityManager().getCriteriaBuilder();
         CriteriaQuery<E> probe = criteriaBuilder.createQuery(entityType);
         Root<E> root = probe.from(entityType);
 
@@ -213,6 +241,7 @@ public class EntityQueries<E> {
     /**
      * Searches for the entities matching the given restriction and additional criteria.
      *
+     * @param context     The repository the query is written for
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
      *                    the entities
      * @param criteria    The additional criteria to apply, or {@code null}
@@ -220,10 +249,10 @@ public class EntityQueries<E> {
      *                    entities with the default ordering of the repository
      * @return The entities of the requested page with the total number of matching entities
      * @throws IllegalArgumentException if the requested ordering refers to an unknown property or to a collection
-     * @see #createQuery(Restriction, Criteria, Sort)
+     * @see #createQuery(RepositoryContext, Restriction, Criteria, Sort)
      */
-    public PaginationResult<E> search(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Pageable pageable) {
-        SelectionQuery<E> query = createQuery(restriction, criteria, pageable.sort());
+    public PaginationResult<E> search(RepositoryContext<E> context, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Pageable pageable) {
+        SelectionQuery<E> query = createQuery(context, restriction, criteria, pageable.sort());
 
         if (pageable.isPaginated()) {
             // The count is intentionally computed from the same query, before the pagination is applied
@@ -246,44 +275,47 @@ public class EntityQueries<E> {
      * Searches for the entities of a related type matching the given restriction, for the repositories exposing
      * the entities gravitating around the managed one, such as the children of an association.
      *
+     * @param context     The repository the query is written for
      * @param <R>         The type of the related entity
      * @param relatedType The type of the related entity
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
      *                    the entities
      * @return The matching entities
      */
-    public <R> List<R> search(Class<R> relatedType, @Nullable Restriction<? super R> restriction) {
+    public <R> List<R> search(RepositoryContext<E> context, Class<R> relatedType, @Nullable Restriction<? super R> restriction) {
         return SelectionSpecification.create(relatedType)
                 .restrict(restriction == null ? unrestricted() : restriction)
-                .createQuery(entityManager)
+                .createQuery(context.entityManager())
                 .getResultList();
     }
 
     /**
      * Counts the entities matching the given restriction and additional criteria.
      *
+     * @param context     The repository the query is written for
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to count all
      *                    the entities
      * @param criteria    The additional criteria to apply, or {@code null}
      * @return The total number of matching entities
      */
-    public long count(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
-        return createQuery(restriction, criteria, Sort.NONE).getResultCount();
+    public long count(RepositoryContext<E> context, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
+        return createQuery(context, restriction, criteria, Sort.NONE).getResultCount();
     }
 
     /**
      * Checks whether at least one entity matches the given restriction and additional criteria.
      * <p>
-     * Unlike {@link #count(Restriction, Criteria)}, the database stops at the first matching row and no entity is
+     * Unlike {@link #count(RepositoryContext, Restriction, Criteria)}, the database stops at the first matching row and no entity is
      * hydrated: only a literal is selected, so nothing is added to the persistence context either.
      *
+     * @param context     The repository the query is written for
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
      *                    the entities
      * @param criteria    The additional criteria to apply, or {@code null}
      * @return {@code true} if at least one entity matches, {@code false} otherwise
      */
-    public boolean exists(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
-        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+    public boolean exists(RepositoryContext<E> context, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
+        CriteriaBuilder criteriaBuilder = context.entityManager().getCriteriaBuilder();
         CriteriaQuery<Integer> query = criteriaBuilder.createQuery(Integer.class);
         Root<E> root = query.from(entityType);
         query.select(criteriaBuilder.literal(1));
@@ -297,7 +329,7 @@ public class EntityQueries<E> {
 
         // No ordering is applied, the question being whether a row exists and not which one comes first, and a
         // plain list is used rather than getSingleResult(), which would throw when nothing matches
-        return !entityManager.createQuery(query).setMaxResults(1).getResultList().isEmpty();
+        return !context.entityManager().createQuery(query).setMaxResults(1).getResultList().isEmpty();
     }
 
     /**
@@ -313,13 +345,14 @@ public class EntityQueries<E> {
      * clause to join: restrict on the attributes of the entity itself, or select the entities to delete with
      * {@link Criteria#exists(Class, String, java.util.function.BiFunction)}, which is a subquery.
      *
+     * @param context     The repository the query is written for
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to delete
      *                    every entity
      * @param criteria    The additional criteria to apply, or {@code null}
      * @return The number of deleted entities
      */
-    public int delete(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
-        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+    public int delete(RepositoryContext<E> context, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
+        CriteriaBuilder criteriaBuilder = context.entityManager().getCriteriaBuilder();
         CriteriaDelete<E> delete = criteriaBuilder.createCriteriaDelete(entityType);
         Root<E> root = delete.from(entityType);
 
@@ -335,7 +368,7 @@ public class EntityQueries<E> {
             delete.where(predicate);
         }
 
-        return entityManager.createQuery(delete).executeUpdate();
+        return context.entityManager().createQuery(delete).executeUpdate();
     }
 
     /**
@@ -344,15 +377,16 @@ public class EntityQueries<E> {
      * <p>
      * Only the first row is fetched, the ordering making it deterministic.
      *
+     * @param context     The repository the query is written for
      * @param restriction The restriction to apply, or {@code null}
      * @param criteria    The additional criteria to apply, or {@code null}
      * @param sort        The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The corresponding entity, or {@link Optional#empty()} if none matches
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
-     * @see #createQuery(Restriction, Criteria, Sort)
+     * @see #createQuery(RepositoryContext, Restriction, Criteria, Sort)
      */
-    public Optional<E> first(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort) {
-        return first(restriction, criteria, sort, LockModeType.NONE);
+    public Optional<E> first(RepositoryContext<E> context, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort) {
+        return first(context, restriction, criteria, sort, LockModeType.NONE);
     }
 
     /**
@@ -363,6 +397,7 @@ public class EntityQueries<E> {
      * deterministic, and the lock is taken as the row is read, so that a concurrent transaction ordering on the
      * very same criteria does not claim it as well.
      *
+     * @param context     The repository the query is written for
      * @param restriction The restriction to apply, or {@code null}
      * @param criteria    The additional criteria to apply, or {@code null}
      * @param sort        The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
@@ -371,9 +406,9 @@ public class EntityQueries<E> {
      * @return The corresponding entity, or {@link Optional#empty()} if none matches
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      */
-    public Optional<E> first(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort, LockModeType lockMode) {
+    public Optional<E> first(RepositoryContext<E> context, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort, LockModeType lockMode) {
         // A plain list is used rather than getResultStream(), which the caller would have to close explicitly
-        return createQuery(restriction, criteria, sort)
+        return createQuery(context, restriction, criteria, sort)
                 .setLockMode(lockMode)
                 .setMaxResults(1)
                 .getResultList()
@@ -384,6 +419,7 @@ public class EntityQueries<E> {
     /**
      * Scrolls through the entities matching the given restriction and criteria.
      *
+     * @param context     The repository the query is written for
      * @param restriction The restriction to apply, or {@code null}
      * @param criteria    The additional criteria to apply, or {@code null}
      * @param cursor      The requested position, size and ordering
@@ -392,18 +428,18 @@ public class EntityQueries<E> {
      *                                  boundary row is {@code null}, or if the cursor is malformed or was issued
      *                                  for another ordering
      */
-    public CursorResult<E> scroll(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Cursor cursor) {
-        Sort resolvedSort = ordering.resolveSort(cursor.sort());
-        CursorPosition position = Cursors.position(cursorCodec, cursor, resolvedSort);
+    public CursorResult<E> scroll(RepositoryContext<E> context, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Cursor cursor) {
+        Sort resolvedSort = ordering.resolveSort(context, cursor.sort());
+        CursorPosition position = Cursors.position(context.cursorCodec(), cursor, resolvedSort);
         Sort direction = Cursors.direction(resolvedSort, position);
         List<String> keyProperties = resolvedSort.criteria().stream().map(SortCriterion::property).toList();
 
-        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+        CriteriaBuilder criteriaBuilder = context.entityManager().getCriteriaBuilder();
         CriteriaQuery<Tuple> query = criteriaBuilder.createTupleQuery();
         Root<E> root = query.from(entityType);
 
         Predicate predicate = null;
-        if (joinsCollection(restriction, criteria)) {
+        if (joinsCollection(context, restriction, criteria)) {
             predicate = semiJoin(criteriaBuilder, query, root, restriction, criteria);
         } else {
             if (restriction != null) {
@@ -414,7 +450,7 @@ public class EntityQueries<E> {
             }
         }
         if (position != null) {
-            predicate = and(criteriaBuilder, predicate, Keysets.seek(criteriaBuilder, root, direction, position.values(), cursorKeyCodec));
+            predicate = and(criteriaBuilder, predicate, Keysets.seek(criteriaBuilder, root, direction, position.values(), context.cursorKeyCodec()));
         }
         if (predicate != null) {
             query.where(predicate);
@@ -429,14 +465,14 @@ public class EntityQueries<E> {
         query.multiselect(selections);
         query.orderBy(Keysets.toOrders(criteriaBuilder, root, direction));
 
-        List<Tuple> rows = entityManager.createQuery(query)
+        List<Tuple> rows = context.entityManager().createQuery(query)
                 .setMaxResults(cursor.limit())
                 .getResultList();
 
         return Cursors.toResult(
-                cursorCodec,
+                context.cursorCodec(),
                 rows.stream().map(row -> row.get(0, entityType)).toList(),
-                rows.stream().<Supplier<List<String>>>map(row -> () -> keysOf(row, keyProperties)).toList(),
+                rows.stream().<Supplier<List<String>>>map(row -> () -> keysOf(context, row, keyProperties)).toList(),
                 cursor,
                 resolvedSort,
                 position);
@@ -445,17 +481,18 @@ public class EntityQueries<E> {
     /**
      * Formats the ordering keys the query returned alongside an entity into their textual representation.
      *
+     * @param context     The repository the query is written for
      * @param row        The fetched row, whose first element is the entity and whose others are the keys
      * @param properties The ordering properties, in the order they were selected in
      * @return The textual keys, in the ordering order
      * @throws IllegalArgumentException if one of the keys is {@code null}, a nullable attribute being unusable as
      *                                  a cursor key since the databases do not agree on where the nulls sort
      */
-    protected List<String> keysOf(Tuple row, List<String> properties) {
+    protected List<String> keysOf(RepositoryContext<E> context, Tuple row, List<String> properties) {
         List<String> keys = new ArrayList<>(properties.size());
         for (int index = 0; index < properties.size(); index++) {
             // The entity occupies the first element, the keys following it in the ordering order
-            keys.add(cursorKeyCodec.format(properties.get(index), row.get(index + 1)));
+            keys.add(context.cursorKeyCodec().format(properties.get(index), row.get(index + 1)));
         }
         return keys;
     }

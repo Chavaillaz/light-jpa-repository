@@ -24,7 +24,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Keyset helpers shared by the query collaborators, building the {@code ORDER BY} clause, the seek predicate and
- * the boundary keys of a cursor query from a {@link EntityOrdering#resolveSort(Sort) resolved ordering}.
+ * the boundary keys of a cursor query from a {@link EntityOrdering#resolveSort(RepositoryContext, Sort) resolved ordering}.
  * <p>
  * The predicate is the lexicographic comparison of the ordering keys, so that a row is returned as soon as it
  * comes strictly after the boundary row in the very same ordering, emitted as a flat disjunction of conjunctions,

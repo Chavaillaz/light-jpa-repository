@@ -9,7 +9,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,12 +49,11 @@ class CoffeeCollectionJoinTest extends HibernateTest {
         runInTransaction(Coffees::persistMenu);
     }
 
-    private <T> T withQueries(Function<EntityQueries<CoffeeEntity>, T> action) {
+    private <T> T withQueries(BiFunction<EntityQueries<CoffeeEntity>, RepositoryContext<CoffeeEntity>, T> action) {
         return inTransaction(entityManager -> {
-            EntityOrdering<CoffeeEntity> ordering = new EntityOrdering<>(entityManager, CoffeeEntity.class,
-                    (builder, root) -> List.of(builder.asc(root.get("name"))), Map::of);
             recordStatements();
-            return action.apply(new EntityQueries<>(entityManager, CoffeeEntity.class, ordering, CursorCodec.DEFAULT, CursorKeyCodec.DEFAULT));
+            return action.apply(EntityQueries.of(CoffeeEntity.class),
+                    new TestContext<>(entityManager, (builder, root) -> List.of(builder.asc(root.get("name"))), Map.of()));
         });
     }
 
@@ -66,7 +65,7 @@ class CoffeeCollectionJoinTest extends HibernateTest {
     @DisplayName("returns each entity once, whatever the number of matching children")
     void returnsEachEntityOnce() {
         PaginationResult<CoffeeEntity> result =
-                withQueries(queries -> queries.search(null, joiningNotes(FLAVOURS), Pageable.UNPAGED));
+                withQueries((queries, context) -> queries.search(context, null, joiningNotes(FLAVOURS), Pageable.UNPAGED));
 
         assertThat(namesOf(result.items())).containsExactlyElementsOf(MATCHING);
     }
@@ -74,7 +73,7 @@ class CoffeeCollectionJoinTest extends HibernateTest {
     @Test
     @DisplayName("counts each entity once as well")
     void countsEachEntityOnce() {
-        long count = withQueries(queries -> queries.count(null, joiningNotes(FLAVOURS)));
+        long count = withQueries((queries, context) -> queries.count(context, null, joiningNotes(FLAVOURS)));
 
         assertThat(count).isEqualTo(MATCHING.size());
     }
@@ -82,8 +81,8 @@ class CoffeeCollectionJoinTest extends HibernateTest {
     @Test
     @DisplayName("paginates without losing a row to a duplicated one")
     void paginatesWithoutDuplicates() {
-        PaginationResult<CoffeeEntity> first = withQueries(queries -> queries.search(null, joiningNotes(FLAVOURS), Pageable.of(0, 2)));
-        PaginationResult<CoffeeEntity> second = withQueries(queries -> queries.search(null, joiningNotes(FLAVOURS), Pageable.of(1, 2)));
+        PaginationResult<CoffeeEntity> first = withQueries((queries, context) -> queries.search(context, null, joiningNotes(FLAVOURS), Pageable.of(0, 2)));
+        PaginationResult<CoffeeEntity> second = withQueries((queries, context) -> queries.search(context, null, joiningNotes(FLAVOURS), Pageable.of(1, 2)));
 
         assertThat(namesOf(first.items())).containsExactly(BOURBON_POINTU, GEISHA);
         assertThat(namesOf(second.items())).containsExactly(SIDAMO, YIRGACHEFFE);
@@ -94,9 +93,9 @@ class CoffeeCollectionJoinTest extends HibernateTest {
     @Test
     @DisplayName("scrolls without losing a row to a duplicated one")
     void scrollsWithoutDuplicates() {
-        CursorResult<CoffeeEntity> first = withQueries(queries -> queries.scroll(null, joiningNotes(FLAVOURS), Cursor.first(2, Sort.NONE)));
-        CursorResult<CoffeeEntity> second = withQueries(queries ->
-                queries.scroll(null, joiningNotes(FLAVOURS), Cursor.of(first.next(), 2, Sort.NONE)));
+        CursorResult<CoffeeEntity> first = withQueries((queries, context) -> queries.scroll(context, null, joiningNotes(FLAVOURS), Cursor.first(2, Sort.NONE)));
+        CursorResult<CoffeeEntity> second = withQueries((queries, context) ->
+                queries.scroll(context, null, joiningNotes(FLAVOURS), Cursor.of(first.next(), 2, Sort.NONE)));
 
         assertThat(namesOf(first.items())).containsExactly(BOURBON_POINTU, GEISHA);
         assertThat(namesOf(second.items())).containsExactly(SIDAMO, YIRGACHEFFE);
@@ -106,7 +105,7 @@ class CoffeeCollectionJoinTest extends HibernateTest {
     @Test
     @DisplayName("issues no distinct, which no database agrees on once the ordering reaches a join")
     void issuesNoDistinct() {
-        withQueries(queries -> queries.search(null, joiningNotes(FLAVOURS), Pageable.of(0, 2)));
+        withQueries((queries, context) -> queries.search(context, null, joiningNotes(FLAVOURS), Pageable.of(0, 2)));
 
         assertThat(statements())
                 .isNotEmpty()
@@ -121,8 +120,8 @@ class CoffeeCollectionJoinTest extends HibernateTest {
     void ordersOnANestedPropertyWhileJoining() {
         // select distinct ... order by roaster.name is rejected by PostgreSQL and Oracle, the ordering
         // expression not being part of the select list; the semi join has no such constraint
-        PaginationResult<CoffeeEntity> result = withQueries(queries ->
-                queries.search(null, joiningNotes(FLAVOURS), Pageable.of(0, 4, Sort.parse("roaster.name,name"))));
+        PaginationResult<CoffeeEntity> result = withQueries((queries, context) ->
+                queries.search(context, null, joiningNotes(FLAVOURS), Pageable.of(0, 4, Sort.parse("roaster.name,name"))));
 
         assertThat(namesOf(result.items()))
                 .as("Kaldi Roasting first, then Moka Brothers, each by name")

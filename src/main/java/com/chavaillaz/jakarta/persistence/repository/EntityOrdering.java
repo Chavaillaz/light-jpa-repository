@@ -3,7 +3,6 @@ package com.chavaillaz.jakarta.persistence.repository;
 import static java.util.Comparator.comparing;
 import static java.util.stream.Collectors.toSet;
 
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
@@ -21,25 +20,33 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.BiFunction;
-import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
- * Ordering rules of a repository, resolving the properties exposed by the API into entity attributes and building
- * the ordering of the queries; see {@link Sort} for why the identifier of the entity is always appended.
+ * Ordering rules of an entity type, resolving the properties exposed by the API into entity attributes and
+ * building the ordering of the queries; see {@link Sort} for why the identifier of the entity is always appended.
  * <p>
- * The default ordering and the searchable properties are provided by the owning repository, so that they stay
- * overridable by its subclasses.
+ * The default ordering and the searchable properties are provided by the repository the query is written for,
+ * through the {@link RepositoryContext} of each call, so that they stay overridable by its subclasses and that
+ * one instance can be shared by every repository over the same entity.
  *
  * @param <E> The type of the managed entity
  */
 public class EntityOrdering<E> {
 
     /**
-     * The entity manager giving access to the criteria builder and to the metamodel.
+     * The ordering rules, held per entity type rather than per repository, nothing of a repository being kept
+     * here. A {@link ClassValue} is used rather than a plain map keyed by the class, so that the cache cannot
+     * hold a class, and therefore its class loader, alive after a redeployment.
      */
-    protected final EntityManager entityManager;
+    private static final ClassValue<EntityOrdering<?>> ORDERINGS = new ClassValue<>() {
+
+        @Override
+        protected EntityOrdering<?> computeValue(Class<?> type) {
+            return new EntityOrdering<>(type);
+        }
+
+    };
 
     /**
      * The type of the managed entity.
@@ -47,32 +54,31 @@ public class EntityOrdering<E> {
     protected final Class<E> entityType;
 
     /**
-     * The provider of the default ordering of the repository.
-     */
-    protected final BiFunction<CriteriaBuilder, Root<E>, List<Order>> defaultOrders;
-
-    /**
-     * The provider of the properties the API consumers are allowed to sort and filter on.
-     */
-    protected final Supplier<Map<String, String>> searchableProperties;
-
-    /**
-     * Creates the ordering rules of a repository.
+     * Creates the ordering rules of an entity type.
+     * <p>
+     * Prefer {@link #of(Class)}, which shares one instance per entity type.
      *
-     * @param entityManager        The entity manager to use
-     * @param entityType           The type of the managed entity
-     * @param defaultOrders        The provider of the default ordering of the repository
-     * @param searchableProperties The provider of the properties that can be sorted and filtered on
+     * @param entityType The type of the managed entity
      */
-    public EntityOrdering(
-            EntityManager entityManager,
-            Class<E> entityType,
-            BiFunction<CriteriaBuilder, Root<E>, List<Order>> defaultOrders,
-            Supplier<Map<String, String>> searchableProperties) {
-        this.entityManager = entityManager;
+    public EntityOrdering(Class<E> entityType) {
         this.entityType = entityType;
-        this.defaultOrders = defaultOrders;
-        this.searchableProperties = searchableProperties;
+    }
+
+    /**
+     * Gets the ordering rules of the given entity type.
+     * <p>
+     * The instance is shared by every repository over that entity, which is possible precisely because it holds
+     * nothing of any of them: the entity manager and the hooks travel with the {@link RepositoryContext} of each
+     * call, so two repositories declaring different searchable properties over the same entity still each get
+     * their own rules applied.
+     *
+     * @param <E>        The type of the managed entity
+     * @param entityType The type of the managed entity
+     * @return The corresponding ordering rules
+     */
+    @SuppressWarnings("unchecked")
+    public static <E> EntityOrdering<E> of(Class<E> entityType) {
+        return (EntityOrdering<E>) ORDERINGS.get(entityType);
     }
 
     /**
@@ -108,18 +114,19 @@ public class EntityOrdering<E> {
      * when no ordering is requested and the query already carries one, so that an ordering a custom RSQL visitor
      * already built on the query is not silently overridden.
      *
+     * @param context  The repository the query is written for
      * @param query    The search query to order
      * @param root     The root entity of the query
      * @param pageable The requested page and ordering
      * @see Pageable
      */
-    public void applyOrder(CriteriaQuery<E> query, Root<E> root, Pageable pageable) {
+    public void applyOrder(RepositoryContext<E> context, CriteriaQuery<E> query, Root<E> root, Pageable pageable) {
         Sort sort = pageable.sort();
         boolean sorted = !sort.isEmpty();
         if (!sorted && !query.getOrderList().isEmpty()) {
             return;
         }
-        query.orderBy(buildOrders(root, sorted ? sort : Sort.NONE));
+        query.orderBy(buildOrders(context, root, sorted ? sort : Sort.NONE));
     }
 
     /**
@@ -127,21 +134,22 @@ public class EntityOrdering<E> {
      * requested, followed by the identifier of the entity so that the resulting ordering is always unique and thus
      * stable.
      *
-     * @param root The root entity of the query
-     * @param sort The requested ordering
+     * @param context The repository the query is written for
+     * @param root    The root entity of the query
+     * @param sort    The requested ordering
      * @return The ordering to apply
      */
-    public List<Order> buildOrders(Root<E> root, Sort sort) {
-        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+    public List<Order> buildOrders(RepositoryContext<E> context, Root<E> root, Sort sort) {
+        CriteriaBuilder criteriaBuilder = context.entityManager().getCriteriaBuilder();
 
         List<Order> orders = new ArrayList<>(sort == null || sort.isEmpty()
-                ? defaultOrders.apply(criteriaBuilder, root)
-                : sort.criteria().stream().map(criterion -> toOrder(criteriaBuilder, root, criterion)).toList());
+                ? context.defaultOrders(criteriaBuilder, root)
+                : sort.criteria().stream().map(criterion -> toOrder(context, criteriaBuilder, root, criterion)).toList());
 
         // The identifier is only appended when it is not already part of the ordering, so that a repository
         // ordering on it explicitly, in descending order for instance, is not overridden
         Set<Expression<?>> ordered = orders.stream().map(Order::getExpression).collect(toSet());
-        getIdPaths(root)
+        getIdPaths(context, root)
                 .filter(path -> !ordered.contains(path))
                 .map(criteriaBuilder::asc)
                 .forEach(orders::add);
@@ -151,14 +159,15 @@ public class EntityOrdering<E> {
     /**
      * Converts a requested criterion into a criteria ordering.
      *
+     * @param context         The repository the query is written for
      * @param criteriaBuilder The builder to use to create the ordering
      * @param root            The root entity of the query
      * @param criterion       The requested criterion
      * @return The corresponding ordering
      * @throws IllegalArgumentException if the criterion refers to an unknown property or to a collection
      */
-    public Order toOrder(CriteriaBuilder criteriaBuilder, Root<E> root, SortCriterion criterion) {
-        Path<?> path = resolvePath(root, criterion.property());
+    public Order toOrder(RepositoryContext<E> context, CriteriaBuilder criteriaBuilder, Root<E> root, SortCriterion criterion) {
+        Path<?> path = resolvePath(context, root, criterion.property());
         return criterion.ascending() ? criteriaBuilder.asc(path) : criteriaBuilder.desc(path);
     }
 
@@ -177,12 +186,13 @@ public class EntityOrdering<E> {
      * property: it is compile time safe by construction rather than API consumer supplied, and it can only reach
      * an attribute a declared property already exposes under its own alias, so accepting it widens no restriction.
      *
+     * @param context  The repository the query is written for
      * @param property The property to resolve
      * @return The path of the corresponding attribute
      * @throws IllegalArgumentException if the property is neither searchable nor an already resolved path
      */
-    public String resolveProperty(String property) {
-        Map<String, String> properties = searchableProperties.get();
+    public String resolveProperty(RepositoryContext<E> context, String property) {
+        Map<String, String> properties = context.searchableProperties();
 
         if (properties.isEmpty() || properties.containsValue(property)) {
             return property;
@@ -199,16 +209,18 @@ public class EntityOrdering<E> {
      * Resolves the path to the given property of the managed entity, a nested property being expressed with
      * {@link SortCriterion#NESTING_SEPARATOR}.
      * <p>
-     * The property is first {@link #resolveProperty(String) resolved} against the searchable properties of the
-     * repository, then validated against the metamodel, as it usually comes from the API consumers.
+     * The property is first {@link #resolveProperty(RepositoryContext, String) resolved} against the searchable
+     * properties of the repository, then validated against the metamodel, as it usually comes from the API
+     * consumers.
      *
+     * @param context  The repository the query is written for
      * @param root     The root entity of the query
      * @param property The property to resolve
      * @return The corresponding path
      * @throws IllegalArgumentException if the property is unknown or refers to a collection
      */
-    public Path<?> resolvePath(Root<E> root, String property) {
-        String[] attributes = Keysets.split(resolveProperty(property));
+    public Path<?> resolvePath(RepositoryContext<E> context, Root<E> root, String property) {
+        String[] attributes = Keysets.split(resolveProperty(context, property));
 
         Path<?> path = root;
         for (int index = 0; index < attributes.length; index++) {
@@ -233,32 +245,33 @@ public class EntityOrdering<E> {
      * <p>
      * The returned ordering is what both the {@code ORDER BY} clause and the seek predicate are built from, so that
      * they can never drift apart and silently return wrong pages. The criteria are expressed as entity attribute
-     * paths, already validated by {@link #resolvePath(Root, String)}.
+     * paths, already validated by {@link #resolvePath(RepositoryContext, Root, String)}.
      *
-     * @param sort The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
+     * @param context The repository the query is written for
+     * @param sort    The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @return The complete ordering, made of path based criteria only
      * @throws IllegalArgumentException if a criterion refers to an unknown property, to a collection, or if the
      *                                  default ordering of the repository is not expressed with plain paths
      */
-    public Sort resolveSort(Sort sort) {
-        CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
+    public Sort resolveSort(RepositoryContext<E> context, Sort sort) {
+        CriteriaBuilder criteriaBuilder = context.entityManager().getCriteriaBuilder();
         // A throwaway root is enough: only the resolved names and directions are kept
         Root<E> root = criteriaBuilder.createQuery(entityType).from(entityType);
 
         List<SortCriterion> criteria = new ArrayList<>();
         if (sort == null || sort.isEmpty()) {
-            for (Order order : defaultOrders.apply(criteriaBuilder, root)) {
+            for (Order order : context.defaultOrders(criteriaBuilder, root)) {
                 criteria.add(new SortCriterion(nameOf(order.getExpression()), order.isAscending()));
             }
         } else {
             for (SortCriterion criterion : sort.criteria()) {
-                criteria.add(new SortCriterion(nameOf(resolvePath(root, criterion.property())), criterion.ascending()));
+                criteria.add(new SortCriterion(nameOf(resolvePath(context, root, criterion.property())), criterion.ascending()));
             }
         }
 
         // The identifier is only appended when it is not already part of the ordering
         Set<String> ordered = criteria.stream().map(SortCriterion::property).collect(toSet());
-        getIdPaths(root)
+        getIdPaths(context, root)
                 .map(EntityOrdering::nameOf)
                 .filter(property -> !ordered.contains(property))
                 .map(SortCriterion::asc)
@@ -270,11 +283,12 @@ public class EntityOrdering<E> {
      * Gets the paths to the attributes composing the identifier of the managed entity, supporting the simple,
      * embedded and composite identifiers.
      *
-     * @param root The root entity of the query
+     * @param context The repository the query is written for
+     * @param root    The root entity of the query
      * @return The paths to order on
      */
-    public Stream<Path<?>> getIdPaths(Root<E> root) {
-        EntityType<E> entityMetamodel = entityManager.getMetamodel().entity(entityType);
+    public Stream<Path<?>> getIdPaths(RepositoryContext<E> context, Root<E> root) {
+        EntityType<E> entityMetamodel = context.entityManager().getMetamodel().entity(entityType);
 
         // Composite identifier declared with an identifier class, spread over several attributes
         if (!entityMetamodel.hasSingleIdAttribute()) {

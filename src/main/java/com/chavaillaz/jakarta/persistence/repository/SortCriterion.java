@@ -100,7 +100,7 @@ public record SortCriterion(
      * that bootstrap, such as a repository finder method, not from a static initializer.
      * <p>
      * When the repository declares searchable properties, the resolved path must already be the target of one of
-     * them, under whatever public alias; see {@link EntityOrdering#resolveProperty(String)}.
+     * them, under whatever public alias; see {@link EntityOrdering#resolveProperty(RepositoryContext, String)}.
      *
      * @param path The attribute path to sort on, from the static metamodel
      * @return The corresponding criterion

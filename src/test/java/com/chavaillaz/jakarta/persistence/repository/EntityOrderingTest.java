@@ -51,13 +51,17 @@ class EntityOrderingTest extends HibernateTest {
         entityManager.close();
     }
 
-    private EntityOrdering<CoffeeEntity> ordering(Map<String, String> properties,
-                                                  BiFunction<CriteriaBuilder, Root<CoffeeEntity>, List<Order>> defaults) {
-        return new EntityOrdering<>(entityManager, CoffeeEntity.class, defaults, () -> properties);
+    private EntityOrdering<CoffeeEntity> ordering() {
+        return EntityOrdering.of(CoffeeEntity.class);
     }
 
-    private EntityOrdering<CoffeeEntity> openOrdering() {
-        return ordering(emptyMap(), BY_NAME);
+    private RepositoryContext<CoffeeEntity> context(Map<String, String> properties,
+                                                    BiFunction<CriteriaBuilder, Root<CoffeeEntity>, List<Order>> defaults) {
+        return new TestContext<>(entityManager, defaults, properties);
+    }
+
+    private RepositoryContext<CoffeeEntity> openContext() {
+        return context(emptyMap(), BY_NAME);
     }
 
     @Nested
@@ -67,38 +71,38 @@ class EntityOrderingTest extends HibernateTest {
         @Test
         @DisplayName("accepts any attribute when no searchable property is declared")
         void acceptsEverythingWhenOpen() {
-            assertThat(openOrdering().resolveProperty("whatever")).isEqualTo("whatever");
+            assertThat(ordering().resolveProperty(openContext(), "whatever")).isEqualTo("whatever");
         }
 
         @Test
         @DisplayName("maps the public name onto the entity path")
         void mapsThePublicName() {
-            EntityOrdering<CoffeeEntity> ordering = ordering(Map.of("roaster", "roaster.name"), BY_NAME);
-            assertThat(ordering.resolveProperty("roaster")).isEqualTo("roaster.name");
+            RepositoryContext<CoffeeEntity> context = context(Map.of("roaster", "roaster.name"), BY_NAME);
+            assertThat(ordering().resolveProperty(context, "roaster")).isEqualTo("roaster.name");
         }
 
         @Test
         @DisplayName("rejects a property that is not declared")
         void rejectsUndeclaredProperty() {
-            EntityOrdering<CoffeeEntity> ordering = ordering(Map.of("name", "name"), BY_NAME);
+            RepositoryContext<CoffeeEntity> context = context(Map.of("name", "name"), BY_NAME);
             assertThatIllegalArgumentException()
-                    .isThrownBy(() -> ordering.resolveProperty("price"))
+                    .isThrownBy(() -> ordering().resolveProperty(context, "price"))
                     .withMessage("Cannot sort or filter on the unknown property price");
         }
 
         @Test
         @DisplayName("accepts an already resolved path, such as one built from the static metamodel")
         void acceptsAnAlreadyResolvedPath() {
-            EntityOrdering<CoffeeEntity> ordering = ordering(Map.of("roaster", "roaster.name"), BY_NAME);
-            assertThat(ordering.resolveProperty("roaster.name")).isEqualTo("roaster.name");
+            RepositoryContext<CoffeeEntity> context = context(Map.of("roaster", "roaster.name"), BY_NAME);
+            assertThat(ordering().resolveProperty(context, "roaster.name")).isEqualTo("roaster.name");
         }
 
         @Test
         @DisplayName("still rejects a path that is the target of no declared property")
         void rejectsAPathTargetOfNoDeclaredProperty() {
-            EntityOrdering<CoffeeEntity> ordering = ordering(Map.of("roaster", "roaster.name"), BY_NAME);
+            RepositoryContext<CoffeeEntity> context = context(Map.of("roaster", "roaster.name"), BY_NAME);
             assertThatIllegalArgumentException()
-                    .isThrownBy(() -> ordering.resolveProperty("notes.flavour"))
+                    .isThrownBy(() -> ordering().resolveProperty(context, "notes.flavour"))
                     .withMessage("Cannot sort or filter on the unknown property notes.flavour");
         }
 
@@ -119,13 +123,13 @@ class EntityOrderingTest extends HibernateTest {
         @Test
         @DisplayName("resolves a simple attribute")
         void resolvesASimpleAttribute() {
-            assertThat(EntityOrdering.nameOf(openOrdering().resolvePath(root, "price"))).isEqualTo("price");
+            assertThat(EntityOrdering.nameOf(ordering().resolvePath(openContext(), root, "price"))).isEqualTo("price");
         }
 
         @Test
         @DisplayName("resolves a nested attribute")
         void resolvesANestedAttribute() {
-            assertThat(EntityOrdering.nameOf(openOrdering().resolvePath(root, "roaster.country")))
+            assertThat(EntityOrdering.nameOf(ordering().resolvePath(openContext(), root, "roaster.country")))
                     .isEqualTo("roaster.country");
         }
 
@@ -133,7 +137,7 @@ class EntityOrderingTest extends HibernateTest {
         @DisplayName("rejects an unknown attribute")
         void rejectsAnUnknownAttribute() {
             assertThatIllegalArgumentException()
-                    .isThrownBy(() -> openOrdering().resolvePath(root, "caffeine"))
+                    .isThrownBy(() -> ordering().resolvePath(openContext(), root, "caffeine"))
                     .withMessageContaining("Cannot sort on the unknown property caffeine");
         }
 
@@ -141,7 +145,7 @@ class EntityOrderingTest extends HibernateTest {
         @DisplayName("rejects a collection, which the distinct queries cannot order on")
         void rejectsACollection() {
             assertThatIllegalArgumentException()
-                    .isThrownBy(() -> openOrdering().resolvePath(root, "notes"))
+                    .isThrownBy(() -> ordering().resolvePath(openContext(), root, "notes"))
                     .withMessage("Cannot sort on the collection property notes");
         }
 
@@ -154,56 +158,57 @@ class EntityOrderingTest extends HibernateTest {
         @Test
         @DisplayName("falls back on the default ordering and appends the identifier")
         void fallsBackOnTheDefaultOrdering() {
-            assertThat(openOrdering().resolveSort(Sort.NONE).toString()).isEqualTo("name,id");
-            assertThat(openOrdering().resolveSort(null).toString()).isEqualTo("name,id");
+            assertThat(ordering().resolveSort(openContext(), Sort.NONE).toString()).isEqualTo("name,id");
+            assertThat(ordering().resolveSort(openContext(), null).toString()).isEqualTo("name,id");
         }
 
         @Test
         @DisplayName("only orders on the identifier when the repository declares no default ordering")
         void onlyOrdersOnTheIdentifier() {
-            assertThat(ordering(emptyMap(), NO_DEFAULT).resolveSort(Sort.NONE).toString()).isEqualTo("id");
+            assertThat(ordering().resolveSort(context(emptyMap(), NO_DEFAULT), Sort.NONE).toString()).isEqualTo("id");
         }
 
         @Test
         @DisplayName("keeps the requested ordering and appends the identifier")
         void keepsTheRequestedOrdering() {
-            assertThat(openOrdering().resolveSort(Sort.parse("-price,name")).toString())
+            assertThat(ordering().resolveSort(openContext(), Sort.parse("-price,name")).toString())
                     .isEqualTo("-price,name,id");
         }
 
         @Test
         @DisplayName("resolves the requested ordering against the searchable properties")
         void resolvesAgainstTheSearchableProperties() {
-            EntityOrdering<CoffeeEntity> ordering = ordering(Map.of("brewer", "roaster.name"), BY_NAME);
-            assertThat(ordering.resolveSort(Sort.parse("-brewer")).toString()).isEqualTo("-roaster.name,id");
+            RepositoryContext<CoffeeEntity> context = context(Map.of("brewer", "roaster.name"), BY_NAME);
+            assertThat(ordering().resolveSort(context, Sort.parse("-brewer")).toString()).isEqualTo("-roaster.name,id");
         }
 
         @Test
         @DisplayName("does not append the identifier twice when it is already ordered on")
         void doesNotDuplicateTheIdentifier() {
-            EntityOrdering<CoffeeEntity> ordering =
-                    ordering(emptyMap(), (builder, root) -> List.of(builder.desc(root.get("id"))));
-            assertThat(ordering.resolveSort(Sort.NONE).toString()).isEqualTo("-id");
-            assertThat(openOrdering().resolveSort(Sort.parse("-id")).toString()).isEqualTo("-id");
+            RepositoryContext<CoffeeEntity> context =
+                    context(emptyMap(), (builder, root) -> List.of(builder.desc(root.get("id"))));
+            assertThat(ordering().resolveSort(context, Sort.NONE).toString()).isEqualTo("-id");
+            assertThat(ordering().resolveSort(openContext(), Sort.parse("-id")).toString()).isEqualTo("-id");
         }
 
         @Test
         @DisplayName("spreads an embedded identifier over its components, ordered by name")
         void spreadsAnEmbeddedIdentifier() {
-            EntityOrdering<BeanBatchEntity> ordering = new EntityOrdering<>(
-                    entityManager, BeanBatchEntity.class, (builder, root) -> List.of(), Map::of);
+            RepositoryContext<BeanBatchEntity> context =
+                    new TestContext<>(entityManager, (builder, root) -> List.of(), emptyMap());
 
-            assertThat(ordering.resolveSort(Sort.NONE).toString()).isEqualTo("id.batchNumber,id.roasterCode");
+            assertThat(EntityOrdering.of(BeanBatchEntity.class).resolveSort(context, Sort.NONE).toString())
+                    .isEqualTo("id.batchNumber,id.roasterCode");
         }
 
         @Test
         @DisplayName("rejects a computed default ordering, unusable as a cursor key")
         void rejectsAComputedDefaultOrdering() {
-            EntityOrdering<CoffeeEntity> ordering =
-                    ordering(emptyMap(), (builder, root) -> List.of(builder.asc(builder.lower(root.get("name")))));
+            RepositoryContext<CoffeeEntity> context =
+                    context(emptyMap(), (builder, root) -> List.of(builder.asc(builder.lower(root.get("name")))));
 
             assertThatIllegalArgumentException()
-                    .isThrownBy(() -> ordering.resolveSort(Sort.NONE))
+                    .isThrownBy(() -> ordering().resolveSort(context, Sort.NONE))
                     .withMessageContaining("Cursor pagination requires an ordering on plain attributes");
         }
 
@@ -225,21 +230,21 @@ class EntityOrderingTest extends HibernateTest {
         @Test
         @DisplayName("applies the default ordering even when unpaged and unsorted, for a deterministic result")
         void ordersAnUnpagedQueryWithTheDefault() {
-            openOrdering().applyOrder(query, root, Pageable.UNPAGED);
+            ordering().applyOrder(openContext(), query, root, Pageable.UNPAGED);
             assertThat(query.getOrderList()).hasSize(2);
         }
 
         @Test
         @DisplayName("orders a paginated query, so that the pages are stable")
         void ordersAPaginatedQuery() {
-            openOrdering().applyOrder(query, root, Pageable.of(0, 10));
+            ordering().applyOrder(openContext(), query, root, Pageable.of(0, 10));
             assertThat(query.getOrderList()).hasSize(2);
         }
 
         @Test
         @DisplayName("orders on the requested criteria even when unpaged")
         void ordersOnTheRequestedCriteria() {
-            openOrdering().applyOrder(query, root, Pageable.sortedBy(Sort.parse("-price")));
+            ordering().applyOrder(openContext(), query, root, Pageable.sortedBy(Sort.parse("-price")));
 
             assertThat(query.getOrderList()).hasSize(2);
             assertThat(query.getOrderList().getFirst().isAscending()).isFalse();
@@ -250,7 +255,7 @@ class EntityOrderingTest extends HibernateTest {
         void doesNotOverrideAnExistingOrdering() {
             query.orderBy(entityManager.getCriteriaBuilder().desc(root.get("price")));
 
-            openOrdering().applyOrder(query, root, Pageable.of(0, 10));
+            ordering().applyOrder(openContext(), query, root, Pageable.of(0, 10));
 
             assertThat(query.getOrderList()).hasSize(1);
         }

@@ -31,9 +31,11 @@ import com.chavaillaz.jakarta.persistence.Identifiable;
  * Base implementation of the {@link Repository} contract, relying on the JPA {@link EntityManager}.
  * <p>
  * The queries are delegated to two collaborators, reachable through {@link #ordering()} and {@link #queries()},
- * so that each concern stays isolated and testable on its own. They are created on the first use, the entity
- * manager being passed to the repository constructor so that the subclasses can stay simple and
- * dependency-injected by their constructor.
+ * so that each concern stays isolated and testable on its own. Both are shared per entity type rather than built
+ * per repository: they hold nothing but the entity type, everything of the repository asking — its entity
+ * manager, its ordering hooks and its cursor codecs — being handed over at each call through {@link #context()}.
+ * The entity manager stays a constructor parameter, so that the subclasses remain simple and dependency-injected
+ * by their constructor, but nothing outliving a transaction ever captures it.
  * <p>
  * Only the methods a repository writes its business queries with are exposed here; the plumbing stays on the
  * collaborators and on the {@link Pageables} and {@link Criteria} helpers, so that overriding cannot break
@@ -71,14 +73,36 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     protected final Class<E> entityType;
 
     /**
-     * @see #ordering()
+     * @see #context()
      */
-    private volatile @Nullable EntityOrdering<E> ordering;
+    private final RepositoryContext<E> context = new RepositoryContext<>() {
 
-    /**
-     * @see #queries()
-     */
-    private volatile @Nullable EntityQueries<E> queries;
+        @Override
+        public EntityManager entityManager() {
+            return entityManager;
+        }
+
+        @Override
+        public List<Order> defaultOrders(CriteriaBuilder criteriaBuilder, Root<E> root) {
+            return getDefaultOrders(criteriaBuilder, root);
+        }
+
+        @Override
+        public Map<String, String> searchableProperties() {
+            return AbstractRepository.this.searchableProperties();
+        }
+
+        @Override
+        public CursorCodec cursorCodec() {
+            return AbstractRepository.this.cursorCodec();
+        }
+
+        @Override
+        public CursorKeyCodec cursorKeyCodec() {
+            return AbstractRepository.this.cursorKeyCodec();
+        }
+
+    };
 
     /**
      * Creates a repository.
@@ -92,57 +116,53 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     }
 
     /**
-     * Gets the ordering rules of the repository, built on first use rather than eagerly in the constructor so
-     * that {@link #getDefaultOrders} and {@link #searchableProperties} are never invoked before the subclass is
-     * fully constructed.
+     * Gets what the query collaborators need from this repository: its entity manager, its ordering hooks and its
+     * cursor codecs.
      * <p>
-     * Built under double checked locking rather than plainly, since a repository is not guaranteed to be confined
-     * to a single thread by whatever scope its owning dependency injection container gives it: without it, two
-     * threads racing on the first call could each observe a stale {@code null} and build their own instance.
+     * The hooks are only ever invoked through it, and never before the subclass is fully constructed, since
+     * nothing calls them until a query is run.
      *
-     * @return The ordering rules, resolving the sortable properties and building the query ordering
+     * @return The context of this repository, handed over at each call to the collaborators
      */
-    protected EntityOrdering<E> ordering() {
-        EntityOrdering<E> current = ordering;
-        if (current == null) {
-            synchronized (this) {
-                current = ordering;
-                if (current == null) {
-                    // The hooks are passed as method references, so that the overriding subclasses stay in charge
-                    ordering = current = new EntityOrdering<>(entityManager, entityType, this::getDefaultOrders, this::searchableProperties);
-                }
-            }
-        }
-        return current;
+    protected RepositoryContext<E> context() {
+        return context;
     }
 
     /**
-     * Gets the query support of the repository, built on first use for the same reason and under the same double
-     * checked locking as {@link #ordering()}.
+     * Gets the ordering rules of the managed entity, resolving the sortable properties and building the query
+     * ordering.
+     * <p>
+     * The instance is shared by every repository over that entity rather than built per repository: it holds
+     * nothing but the entity type, whatever is specific to a repository travelling with the {@link #context()} of
+     * each call. There is therefore nothing to initialise lazily, and no entity manager, which is bound to a
+     * transaction, is captured by anything outliving it.
      *
-     * @return The query support, building the search, count and scroll queries from the restrictions and criteria
+     * @return The ordering rules of the managed entity
+     */
+    protected EntityOrdering<E> ordering() {
+        return EntityOrdering.of(entityType);
+    }
+
+    /**
+     * Gets the query support of the managed entity, building the search, count and scroll queries from the
+     * restrictions and criteria.
+     * <p>
+     * Shared per entity type for the same reason as {@link #ordering()}.
+     *
+     * @return The query support of the managed entity
      */
     protected EntityQueries<E> queries() {
-        EntityQueries<E> current = queries;
-        if (current == null) {
-            synchronized (this) {
-                current = queries;
-                if (current == null) {
-                    queries = current = new EntityQueries<>(entityManager, entityType, ordering(), cursorCodec(), cursorKeyCodec());
-                }
-            }
-        }
-        return current;
+        return EntityQueries.of(entityType);
     }
 
     @Override
     public PaginationResult<E> findAll(Pageable pageable) {
-        return queries().search(unrestricted(), null, pageable);
+        return queries().search(context, unrestricted(), null, pageable);
     }
 
     @Override
     public CursorResult<E> findAll(Cursor cursor) {
-        return queries().scroll(unrestricted(), null, cursor);
+        return queries().scroll(context, unrestricted(), null, cursor);
     }
 
     @Override
@@ -250,7 +270,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @throws IllegalArgumentException if the requested ordering refers to an unknown property or to a collection
      */
     protected PaginationResult<E> search(@Nullable Restriction<? super E> restriction, Pageable pageable) {
-        return queries().search(restriction, null, pageable);
+        return queries().search(context, restriction, null, pageable);
     }
 
     /**
@@ -265,7 +285,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #search(Restriction, Pageable)
      */
     protected PaginationResult<E> search(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Pageable pageable) {
-        return queries().search(restriction, criteria, pageable);
+        return queries().search(context, restriction, criteria, pageable);
     }
 
     /**
@@ -278,7 +298,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #search(Restriction, Criteria, Pageable)
      */
     protected PaginationResult<E> search(@Nullable Criteria<E> criteria, Pageable pageable) {
-        return queries().search(null, criteria, pageable);
+        return queries().search(context, null, criteria, pageable);
     }
 
     /**
@@ -291,7 +311,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #search(Restriction, Pageable)
      */
     protected List<E> search(@Nullable Restriction<? super E> restriction) {
-        return queries().search(restriction, null, unpaged()).items();
+        return queries().search(context, restriction, null, unpaged()).items();
     }
 
     /**
@@ -308,7 +328,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      */
     protected List<E> search(@Nullable Restriction<? super E> restriction, Sort sort) {
-        return queries().search(restriction, null, sortedBy(sort)).items();
+        return queries().search(context, restriction, null, sortedBy(sort)).items();
     }
 
     /**
@@ -321,7 +341,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #search(Criteria, Pageable)
      */
     protected List<E> search(@Nullable Criteria<E> criteria, Sort sort) {
-        return queries().search(null, criteria, sortedBy(sort)).items();
+        return queries().search(context, null, criteria, sortedBy(sort)).items();
     }
 
     /**
@@ -335,7 +355,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #search(Restriction, Criteria, Pageable)
      */
     protected List<E> search(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
-        return queries().search(restriction, criteria, unpaged()).items();
+        return queries().search(context, restriction, criteria, unpaged()).items();
     }
 
     /**
@@ -347,7 +367,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #search(Criteria, Pageable)
      */
     protected List<E> search(@Nullable Criteria<E> criteria) {
-        return queries().search(null, criteria, unpaged()).items();
+        return queries().search(context, null, criteria, unpaged()).items();
     }
 
     /**
@@ -359,10 +379,10 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
      *                    the entities
      * @return The matching entities
-     * @see EntityQueries#search(Class, Restriction)
+     * @see EntityQueries#search(RepositoryContext, Class, Restriction)
      */
     protected <R> List<R> search(Class<R> relatedType, @Nullable Restriction<? super R> restriction) {
-        return queries().search(relatedType, restriction);
+        return queries().search(context, relatedType, restriction);
     }
 
     /**
@@ -374,7 +394,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #scroll(Restriction, Criteria, Cursor)
      */
     protected CursorResult<E> scroll(@Nullable Restriction<? super E> restriction, Cursor cursor) {
-        return queries().scroll(restriction, null, cursor);
+        return queries().scroll(context, restriction, null, cursor);
     }
 
     /**
@@ -389,7 +409,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #scroll(Restriction, Criteria, Cursor)
      */
     protected CursorResult<E> scroll(@Nullable Criteria<E> criteria, Cursor cursor) {
-        return queries().scroll(null, criteria, cursor);
+        return queries().scroll(context, null, criteria, cursor);
     }
 
     /**
@@ -410,7 +430,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      *                                  for another ordering
      */
     protected CursorResult<E> scroll(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Cursor cursor) {
-        return queries().scroll(restriction, criteria, cursor);
+        return queries().scroll(context, restriction, criteria, cursor);
     }
 
     /**
@@ -472,12 +492,12 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @throws IllegalArgumentException if the ordering is not usable as a cursor key
      */
     protected Stream<E> stream(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort, int pageSize) {
-        return Cursors.stream(cursor -> queries().scroll(restriction, criteria, cursor), sort, pageSize);
+        return Cursors.stream(cursor -> queries().scroll(context, restriction, criteria, cursor), sort, pageSize);
     }
 
     @Override
     public long count() {
-        return queries().count(unrestricted(), null);
+        return queries().count(context, unrestricted(), null);
     }
 
     /**
@@ -489,7 +509,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #count(Restriction, Criteria)
      */
     protected long count(@Nullable Restriction<? super E> restriction) {
-        return queries().count(restriction, null);
+        return queries().count(context, restriction, null);
     }
 
     /**
@@ -501,7 +521,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @return The total number of matching entities
      */
     protected long count(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
-        return queries().count(restriction, criteria);
+        return queries().count(context, restriction, criteria);
     }
 
     /**
@@ -512,7 +532,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #count(Restriction, Criteria)
      */
     protected long count(@Nullable Criteria<E> criteria) {
-        return queries().count(null, criteria);
+        return queries().count(context, null, criteria);
     }
 
     /**
@@ -524,7 +544,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #exists(Restriction, Criteria)
      */
     protected boolean exists(@Nullable Restriction<? super E> restriction) {
-        return queries().exists(restriction, null);
+        return queries().exists(context, restriction, null);
     }
 
     /**
@@ -540,7 +560,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @return {@code true} if at least one entity matches, {@code false} otherwise
      */
     protected boolean exists(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
-        return queries().exists(restriction, criteria);
+        return queries().exists(context, restriction, criteria);
     }
 
     /**
@@ -551,7 +571,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #exists(Restriction, Criteria)
      */
     protected boolean exists(@Nullable Criteria<E> criteria) {
-        return queries().exists(null, criteria);
+        return queries().exists(context, null, criteria);
     }
 
     /**
@@ -563,7 +583,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #deleteAll(Restriction, Criteria)
      */
     protected int deleteAll(@Nullable Restriction<? super E> restriction) {
-        return queries().delete(restriction, null);
+        return queries().delete(context, restriction, null);
     }
 
     /**
@@ -571,7 +591,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * <p>
      * This is a bulk deletion: it does not cascade, does not honour {@code orphanRemoval}, does not run the
      * {@code @PreRemove} callbacks and leaves the already loaded entities in the persistence context. Prefer
-     * {@link #deleteAll(Collection)} when any of that matters; see {@link EntityQueries#delete} for the details.
+     * {@link #deleteAll(Collection)} when any of that matters; see {@link EntityQueries#delete(RepositoryContext, Restriction, Criteria)} for the details.
      *
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to delete
      *                    every entity
@@ -579,7 +599,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @return The number of deleted entities
      */
     protected int deleteAll(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
-        return queries().delete(restriction, criteria);
+        return queries().delete(context, restriction, criteria);
     }
 
     /**
@@ -590,7 +610,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #deleteAll(Restriction, Criteria)
      */
     protected int deleteAll(@Nullable Criteria<E> criteria) {
-        return queries().delete(null, criteria);
+        return queries().delete(context, null, criteria);
     }
 
     /**
@@ -601,7 +621,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #first(Restriction, Criteria, Sort)
      */
     protected Optional<E> first(@Nullable Restriction<? super E> restriction) {
-        return queries().first(restriction, null, Sort.NONE);
+        return queries().first(context, restriction, null, Sort.NONE);
     }
 
     /**
@@ -614,7 +634,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #first(Restriction, Criteria, Sort)
      */
     protected Optional<E> first(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
-        return queries().first(restriction, criteria, Sort.NONE);
+        return queries().first(context, restriction, criteria, Sort.NONE);
     }
 
     /**
@@ -630,7 +650,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      */
     protected Optional<E> first(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort) {
-        return queries().first(restriction, criteria, sort);
+        return queries().first(context, restriction, criteria, sort);
     }
 
     /**
@@ -650,7 +670,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      */
     protected Optional<E> first(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort, LockModeType lockMode) {
-        return queries().first(restriction, criteria, sort, lockMode);
+        return queries().first(context, restriction, criteria, sort, lockMode);
     }
 
     /**
@@ -661,7 +681,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #first(Criteria, Sort)
      */
     protected Optional<E> first(@Nullable Criteria<E> criteria) {
-        return queries().first(null, criteria, Sort.NONE);
+        return queries().first(context, null, criteria, Sort.NONE);
     }
 
     /**
@@ -673,7 +693,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #first(Restriction, Criteria, Sort)
      */
     protected Optional<E> first(@Nullable Criteria<E> criteria, Sort sort) {
-        return queries().first(null, criteria, sort);
+        return queries().first(context, null, criteria, sort);
     }
 
     /**
