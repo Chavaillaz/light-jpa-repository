@@ -3,7 +3,6 @@ package com.chavaillaz.jakarta.persistence.repository;
 import static com.chavaillaz.jakarta.persistence.repository.Pageable.sortedBy;
 import static com.chavaillaz.jakarta.persistence.repository.Pageable.unpaged;
 import static jakarta.transaction.Transactional.TxType.MANDATORY;
-import static org.hibernate.query.restriction.Restriction.unrestricted;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -157,12 +156,12 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
 
     @Override
     public PaginationResult<E> findAll(Pageable pageable) {
-        return queries().search(context, unrestricted(), null, pageable);
+        return queries().search(context(), null, null, pageable);
     }
 
     @Override
     public CursorResult<E> findAll(Cursor cursor) {
-        return queries().scroll(context, unrestricted(), null, cursor);
+        return queries().scroll(context(), null, null, cursor);
     }
 
     @Override
@@ -211,10 +210,13 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
         }
 
         // The identifiers are looked up by chunks, several databases rejecting an IN list beyond a few thousand
-        // elements (a thousand on Oracle) and every one of them degrading long before that
+        // elements (a thousand on Oracle) and every one of them degrading long before that. The hook is read once
+        // and validated: a non-positive size would never advance the loop, which would hang instead of failing
+        int batchSize = requirePositive(idBatchSize(), "idBatchSize");
+
         List<E> entities = new ArrayList<>(distinctIds.size());
-        for (int start = 0; start < distinctIds.size(); start += idBatchSize()) {
-            entities.addAll(findAllByIdChunk(distinctIds.subList(start, Math.min(start + idBatchSize(), distinctIds.size())), idAttribute.get()));
+        for (int start = 0; start < distinctIds.size(); start += batchSize) {
+            entities.addAll(findAllByIdChunk(distinctIds.subList(start, Math.min(start + batchSize, distinctIds.size())), idAttribute.get()));
         }
         return List.copyOf(entities);
     }
@@ -235,7 +237,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * Override to match the limit of the underlying database, which rejects a longer list of parameters, or to
      * lower it so that the query plans stay cacheable.
      *
-     * @return The maximum number of identifiers per query, which must be strictly positive
+     * @return The maximum number of identifiers per query, which must be strictly positive, {@link #findAllById(Collection)} rejecting anything else
      */
     protected int idBatchSize() {
         return DEFAULT_ID_BATCH_SIZE;
@@ -270,7 +272,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @throws IllegalArgumentException if the requested ordering refers to an unknown property or to a collection
      */
     protected PaginationResult<E> search(@Nullable Restriction<? super E> restriction, Pageable pageable) {
-        return queries().search(context, restriction, null, pageable);
+        return queries().search(context(), restriction, null, pageable);
     }
 
     /**
@@ -285,7 +287,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #search(Restriction, Pageable)
      */
     protected PaginationResult<E> search(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Pageable pageable) {
-        return queries().search(context, restriction, criteria, pageable);
+        return queries().search(context(), restriction, criteria, pageable);
     }
 
     /**
@@ -298,7 +300,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #search(Restriction, Criteria, Pageable)
      */
     protected PaginationResult<E> search(@Nullable Criteria<E> criteria, Pageable pageable) {
-        return queries().search(context, null, criteria, pageable);
+        return queries().search(context(), null, criteria, pageable);
     }
 
     /**
@@ -311,7 +313,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #search(Restriction, Pageable)
      */
     protected List<E> search(@Nullable Restriction<? super E> restriction) {
-        return queries().search(context, restriction, null, unpaged()).items();
+        return queries().search(context(), restriction, null, unpaged()).items();
     }
 
     /**
@@ -328,7 +330,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      */
     protected List<E> search(@Nullable Restriction<? super E> restriction, Sort sort) {
-        return queries().search(context, restriction, null, sortedBy(sort)).items();
+        return queries().search(context(), restriction, null, sortedBy(sort)).items();
     }
 
     /**
@@ -341,7 +343,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #search(Criteria, Pageable)
      */
     protected List<E> search(@Nullable Criteria<E> criteria, Sort sort) {
-        return queries().search(context, null, criteria, sortedBy(sort)).items();
+        return queries().search(context(), null, criteria, sortedBy(sort)).items();
     }
 
     /**
@@ -355,7 +357,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #search(Restriction, Criteria, Pageable)
      */
     protected List<E> search(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
-        return queries().search(context, restriction, criteria, unpaged()).items();
+        return queries().search(context(), restriction, criteria, unpaged()).items();
     }
 
     /**
@@ -367,7 +369,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #search(Criteria, Pageable)
      */
     protected List<E> search(@Nullable Criteria<E> criteria) {
-        return queries().search(context, null, criteria, unpaged()).items();
+        return queries().search(context(), null, criteria, unpaged()).items();
     }
 
     /**
@@ -382,7 +384,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see EntityQueries#search(RepositoryContext, Class, Restriction)
      */
     protected <R> List<R> search(Class<R> relatedType, @Nullable Restriction<? super R> restriction) {
-        return queries().search(context, relatedType, restriction);
+        return queries().search(context(), relatedType, restriction);
     }
 
     /**
@@ -394,7 +396,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #scroll(Restriction, Criteria, Cursor)
      */
     protected CursorResult<E> scroll(@Nullable Restriction<? super E> restriction, Cursor cursor) {
-        return queries().scroll(context, restriction, null, cursor);
+        return queries().scroll(context(), restriction, null, cursor);
     }
 
     /**
@@ -409,7 +411,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #scroll(Restriction, Criteria, Cursor)
      */
     protected CursorResult<E> scroll(@Nullable Criteria<E> criteria, Cursor cursor) {
-        return queries().scroll(context, null, criteria, cursor);
+        return queries().scroll(context(), null, criteria, cursor);
     }
 
     /**
@@ -430,7 +432,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      *                                  for another ordering
      */
     protected CursorResult<E> scroll(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Cursor cursor) {
-        return queries().scroll(context, restriction, criteria, cursor);
+        return queries().scroll(context(), restriction, criteria, cursor);
     }
 
     /**
@@ -492,12 +494,12 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @throws IllegalArgumentException if the ordering is not usable as a cursor key
      */
     protected Stream<E> stream(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort, int pageSize) {
-        return Cursors.stream(cursor -> queries().scroll(context, restriction, criteria, cursor), sort, pageSize);
+        return Cursors.stream(cursor -> queries().scroll(context(), restriction, criteria, cursor), sort, pageSize);
     }
 
     @Override
     public long count() {
-        return queries().count(context, unrestricted(), null);
+        return queries().count(context(), null, null);
     }
 
     /**
@@ -509,7 +511,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #count(Restriction, Criteria)
      */
     protected long count(@Nullable Restriction<? super E> restriction) {
-        return queries().count(context, restriction, null);
+        return queries().count(context(), restriction, null);
     }
 
     /**
@@ -521,7 +523,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @return The total number of matching entities
      */
     protected long count(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
-        return queries().count(context, restriction, criteria);
+        return queries().count(context(), restriction, criteria);
     }
 
     /**
@@ -532,7 +534,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #count(Restriction, Criteria)
      */
     protected long count(@Nullable Criteria<E> criteria) {
-        return queries().count(context, null, criteria);
+        return queries().count(context(), null, criteria);
     }
 
     /**
@@ -544,7 +546,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #exists(Restriction, Criteria)
      */
     protected boolean exists(@Nullable Restriction<? super E> restriction) {
-        return queries().exists(context, restriction, null);
+        return queries().exists(context(), restriction, null);
     }
 
     /**
@@ -560,7 +562,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @return {@code true} if at least one entity matches, {@code false} otherwise
      */
     protected boolean exists(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
-        return queries().exists(context, restriction, criteria);
+        return queries().exists(context(), restriction, criteria);
     }
 
     /**
@@ -571,7 +573,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #exists(Restriction, Criteria)
      */
     protected boolean exists(@Nullable Criteria<E> criteria) {
-        return queries().exists(context, null, criteria);
+        return queries().exists(context(), null, criteria);
     }
 
     /**
@@ -583,7 +585,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #deleteAll(Restriction, Criteria)
      */
     protected int deleteAll(@Nullable Restriction<? super E> restriction) {
-        return queries().delete(context, restriction, null);
+        return queries().delete(context(), restriction, null);
     }
 
     /**
@@ -599,7 +601,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @return The number of deleted entities
      */
     protected int deleteAll(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
-        return queries().delete(context, restriction, criteria);
+        return queries().delete(context(), restriction, criteria);
     }
 
     /**
@@ -610,7 +612,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #deleteAll(Restriction, Criteria)
      */
     protected int deleteAll(@Nullable Criteria<E> criteria) {
-        return queries().delete(context, null, criteria);
+        return queries().delete(context(), null, criteria);
     }
 
     /**
@@ -621,7 +623,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #first(Restriction, Criteria, Sort)
      */
     protected Optional<E> first(@Nullable Restriction<? super E> restriction) {
-        return queries().first(context, restriction, null, Sort.NONE);
+        return queries().first(context(), restriction, null, Sort.NONE);
     }
 
     /**
@@ -634,7 +636,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #first(Restriction, Criteria, Sort)
      */
     protected Optional<E> first(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
-        return queries().first(context, restriction, criteria, Sort.NONE);
+        return queries().first(context(), restriction, criteria, Sort.NONE);
     }
 
     /**
@@ -650,7 +652,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      */
     protected Optional<E> first(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort) {
-        return queries().first(context, restriction, criteria, sort);
+        return queries().first(context(), restriction, criteria, sort);
     }
 
     /**
@@ -670,7 +672,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      */
     protected Optional<E> first(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort, LockModeType lockMode) {
-        return queries().first(context, restriction, criteria, sort, lockMode);
+        return queries().first(context(), restriction, criteria, sort, lockMode);
     }
 
     /**
@@ -681,7 +683,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #first(Criteria, Sort)
      */
     protected Optional<E> first(@Nullable Criteria<E> criteria) {
-        return queries().first(context, null, criteria, Sort.NONE);
+        return queries().first(context(), null, criteria, Sort.NONE);
     }
 
     /**
@@ -693,7 +695,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @see #first(Restriction, Criteria, Sort)
      */
     protected Optional<E> first(@Nullable Criteria<E> criteria, Sort sort) {
-        return queries().first(context, null, criteria, sort);
+        return queries().first(context(), null, criteria, sort);
     }
 
     /**
@@ -835,19 +837,43 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @return The number of saved entities
      */
     public int saveAllInBatches(Collection<E> entities) {
+        // The hook is read once and validated: a size of zero would fail on the modulo itself, and a negative one
+        // would never trigger a flush, which is exactly what this method exists to do
+        int batchSize = requirePositive(saveBatchSize(), "saveBatchSize");
+
         int saved = 0;
         for (E entity : entities) {
             save(entity);
-            if (++saved % saveBatchSize() == 0) {
-                entityManager.flush();
-                entityManager.clear();
+            if (++saved % batchSize == 0) {
+                flushAndClear();
             }
         }
-        if (saved % saveBatchSize() != 0) {
-            entityManager.flush();
-            entityManager.clear();
+        // The trailing partial batch still has to be flushed, an empty collection leaving nothing to flush at all
+        if (saved % batchSize != 0) {
+            flushAndClear();
         }
         return saved;
+    }
+
+    private void flushAndClear() {
+        entityManager.flush();
+        entityManager.clear();
+    }
+
+    /**
+     * Checks that the value a batch size hook returned can actually drive a loop, so that an override returning
+     * zero or a negative size fails loudly on the spot instead of hanging or throwing further away.
+     *
+     * @param size The size the hook returned
+     * @param hook The name of the hook, to name it in the error message
+     * @return The very same size
+     * @throws IllegalArgumentException if the size is not strictly positive
+     */
+    private static int requirePositive(int size, String hook) {
+        if (size < 1) {
+            throw new IllegalArgumentException("The batch size returned by %s() must be strictly positive, got %d".formatted(hook, size));
+        }
+        return size;
     }
 
     /**
@@ -857,7 +883,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * Override to match the {@code hibernate.jdbc.batch_size} of the persistence unit, the statements only being
      * grouped by the driver up to that size.
      *
-     * @return The number of entities per batch, which must be strictly positive
+     * @return The number of entities per batch, which must be strictly positive, {@link #saveAllInBatches(Collection)} rejecting anything else
      */
     protected int saveBatchSize() {
         return DEFAULT_SAVE_BATCH_SIZE;

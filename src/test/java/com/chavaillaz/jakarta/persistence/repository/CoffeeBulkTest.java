@@ -18,6 +18,7 @@ import jakarta.persistence.PersistenceException;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -198,11 +199,56 @@ class CoffeeBulkTest extends HibernateTest {
             assertThat(remainingCount()).isEqualTo(14);
         }
 
+        @Test
+        @DisplayName("saves nothing and flushes nothing for an empty collection")
+        void savesNothingForAnEmptyCollection() {
+            int saved = inTransaction(entityManager -> new SmallBatchRepository(entityManager).saveAllInBatches(List.of()));
+
+            assertThat(saved).isZero();
+            assertThat(remainingCount()).isEqualTo(7);
+        }
+
+        @Test
+        @DisplayName("rejects a batch size an override left non positive, instead of throwing further away")
+        void rejectsANonPositiveBatchSize() {
+            List<CoffeeEntity> batch = List.of(coffee("Unbatchable"));
+
+            assertThatExceptionOfType(IllegalArgumentException.class)
+                    .isThrownBy(() -> inTransaction(entityManager -> new BrokenBatchRepository(entityManager).saveAllInBatches(batch)))
+                    .withMessageContaining("saveBatchSize");
+        }
+
+    }
+
+    @Nested
+    @DisplayName("looking up by identifiers")
+    class ByIdentifiers {
+
+        @Test
+        @DisplayName("looks the identifiers up by chunks, returning each entity exactly once")
+        void looksUpByChunks() {
+            List<Long> ids = withRepository(repository -> repository.findAll().stream().map(CoffeeEntity::getId).toList());
+            List<Long> duplicated = Stream.concat(ids.stream(), ids.stream()).toList();
+
+            List<CoffeeEntity> found = inTransaction(entityManager -> new SmallBatchRepository(entityManager).findAllById(duplicated));
+
+            assertThat(found).as("the duplicated identifiers are looked up once").hasSize(7);
+            assertThat(namesOf(found)).containsExactlyInAnyOrderElementsOf(Coffees.MENU);
+        }
+
+        @Test
+        @DisplayName("rejects a chunk size an override left non positive, which would never advance the lookup")
+        void rejectsANonPositiveChunkSize() {
+            assertThatExceptionOfType(IllegalArgumentException.class)
+                    .isThrownBy(() -> inTransaction(entityManager -> new BrokenBatchRepository(entityManager).findAllById(List.of(1L))))
+                    .withMessageContaining("idBatchSize");
+        }
+
     }
 
     /**
-     * A repository flushing every ten entities, so that the batching is exercised without saving the fifty
-     * entities the default batch size would need.
+     * A repository flushing every ten entities and looking the identifiers up three at a time, so that both
+     * batchings are exercised without needing the fifty entities and the thousand identifiers of the defaults.
      */
     static class SmallBatchRepository extends CoffeeRepositoryJpa {
 
@@ -213,6 +259,33 @@ class CoffeeBulkTest extends HibernateTest {
         @Override
         protected int saveBatchSize() {
             return 10;
+        }
+
+        @Override
+        protected int idBatchSize() {
+            return 3;
+        }
+
+    }
+
+    /**
+     * A repository whose batch size hooks are broken, which used to hang the identifier lookup and to fail the
+     * batched save on a division by zero rather than on the actual mistake.
+     */
+    static class BrokenBatchRepository extends CoffeeRepositoryJpa {
+
+        BrokenBatchRepository(EntityManager entityManager) {
+            super(entityManager);
+        }
+
+        @Override
+        protected int saveBatchSize() {
+            return 0;
+        }
+
+        @Override
+        protected int idBatchSize() {
+            return 0;
         }
 
     }
