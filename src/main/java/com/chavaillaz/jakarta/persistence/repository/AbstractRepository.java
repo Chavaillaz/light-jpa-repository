@@ -729,6 +729,12 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * and silently drops the entities having no roaster, whereas
      * {@code root.join("roaster", JoinType.LEFT).get("name")} keeps them, which is what the repository does for a
      * requested ordering.
+     * <p>
+     * The inner join is worth avoiding for more than the missing rows. The count of a paginated search is derived
+     * from the very same query without its {@code order by} clause, so the join goes with it and the entities the
+     * results dropped are still counted: a page of nine roasted coffees announces a total of ten. And the cursor
+     * pagination reads this ordering back as attribute paths, which it resolves with a left join of its own, so
+     * the two paginations of one repository would not even return the same entities.
      *
      * @param criteriaBuilder The builder to use to create the ordering
      * @param root            The root entity of the query
