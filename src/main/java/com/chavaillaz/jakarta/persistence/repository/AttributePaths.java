@@ -87,14 +87,15 @@ public final class AttributePaths {
      * being derived without the {@code order by} clause. A left join keeps it, the database then placing its
      * {@code null} key first or last depending on its own null ordering.
      * <p>
-     * The joins are reused rather than created anew for each key, so that ordering on two attributes of the same
-     * association, or ordering and seeking on the same one, does not join it twice.
+     * The joins the query already has are reused rather than created anew for each key, so that ordering on two
+     * attributes of the same association, ordering and seeking on the same one, or ordering on the association a
+     * restriction or a criteria already joins, does not join it twice; see {@link #reusedJoin(From, String)}.
      *
      * @param parent       The path to resolve the attribute against
      * @param attribute    The name of the attribute to resolve
      * @param intermediate {@code true} when the attribute is not the last one of the path, and is therefore
      *                     navigated rather than read
-     * @return The corresponding path, a left join for an intermediate association
+     * @return The corresponding path, a join for an intermediate association
      * @throws IllegalArgumentException if the attribute does not exist on the parent path
      */
     static Path<?> step(Path<?> parent, String attribute, boolean intermediate) {
@@ -106,7 +107,7 @@ public final class AttributePaths {
                 && parent instanceof From<?, ?> owner
                 && path.getModel() instanceof SingularAttribute<?, ?> singular
                 && singular.isAssociation()) {
-            return leftJoin(owner, attribute);
+            return reusedJoin(owner, attribute);
         }
         return path;
     }
@@ -142,9 +143,22 @@ public final class AttributePaths {
         return value;
     }
 
-    private static Join<?, ?> leftJoin(From<?, ?> owner, String attribute) {
+    /**
+     * Navigates an association through the join the query already has on it, creating a left one only when it has
+     * none.
+     * <p>
+     * Whatever its type, an existing join is the one to walk: it is already part of the query, so the rows it
+     * keeps are already the rows the query returns, and adding a left join next to an inner one cannot bring back
+     * the entities the latter has dropped. It would only make the database join the same table twice, to order on
+     * a column the first join already reaches.
+     *
+     * @param owner     The root or join owning the association
+     * @param attribute The name of the association to navigate
+     * @return The join to resolve the rest of the path against
+     */
+    private static Join<?, ?> reusedJoin(From<?, ?> owner, String attribute) {
         return owner.getJoins().stream()
-                .filter(join -> join.getAttribute().getName().equals(attribute) && join.getJoinType() == LEFT)
+                .filter(join -> join.getAttribute().getName().equals(attribute))
                 .<Join<?, ?>>map(join -> join)
                 .findFirst()
                 .orElseGet(() -> owner.join(attribute, LEFT));

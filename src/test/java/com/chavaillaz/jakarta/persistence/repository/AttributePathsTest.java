@@ -3,6 +3,7 @@ package com.chavaillaz.jakarta.persistence.repository;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.GEISHA;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.coffee;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.roaster;
+import static jakarta.persistence.criteria.JoinType.INNER;
 import static jakarta.persistence.criteria.JoinType.LEFT;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
@@ -77,6 +78,18 @@ class AttributePathsTest extends HibernateTest {
         AttributePaths.path(root, "roaster.country");
 
         assertThat(root.getJoins()).as("a single join is created and reused").hasSize(1);
+    }
+
+    @Test
+    @DisplayName("reuses the join a restriction already made on the association, whatever its type")
+    void reusesTheJoinOfTheQueryItself() {
+        root.join(CoffeeEntity_.ROASTER);
+
+        assertThat(EntityOrdering.nameOf(AttributePaths.path(root, "roaster.name"))).isEqualTo("roaster.name");
+        assertThat(root.getJoins())
+                .as("a left join next to the inner one cannot bring back the rows it dropped, it only joins twice")
+                .singleElement()
+                .satisfies(join -> assertThat(join.getJoinType()).isEqualTo(INNER));
     }
 
     @Test

@@ -4,11 +4,14 @@ import static com.chavaillaz.jakarta.persistence.repository.example.CoffeeReposi
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.BLUE_MOUNTAIN;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.ETHIOPIA;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.GEISHA;
+import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.HARRAR;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.SIDAMO;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.YIRGACHEFFE;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.namesOf;
+import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
 import static org.hibernate.query.restriction.Restriction.equal;
 import static org.hibernate.query.restriction.Restriction.unrestricted;
 
@@ -140,6 +143,24 @@ class EntityQueriesTest extends HibernateTest {
         assertThat(withQueries((queries, context) -> queries.search(context, null, null, Pageable.of(0, 2, Sort.parse("roaster")))).items())
                 .as("the offset pagination keeps ordering on it, only a cursor needs to read the key back")
                 .hasSize(2);
+    }
+
+    @Test
+    @DisplayName("orders through the join the criteria already made, rather than joining the association twice")
+    void ordersThroughTheJoinOfTheCriteria() {
+        recordStatements();
+        PaginationResult<CoffeeEntity> result = withQueries((queries, context) -> queries.search(
+                context,
+                null,
+                (criteriaBuilder, query, root) -> criteriaBuilder.equal(root.join(CoffeeEntity_.roaster).get(RoasterEntity_.COUNTRY), ETHIOPIA),
+                Pageable.of(0, 10, Sort.parse("roaster.name"))));
+
+        assertThat(namesOf(result.items())).containsExactly(HARRAR, SIDAMO, YIRGACHEFFE);
+        assertThat(statements())
+                .filteredOn(sql -> sql.startsWith("select ce1_0"))
+                .singleElement(as(STRING))
+                .as("the ordering reaches the roaster through the join the criteria already made")
+                .containsOnlyOnce("join roaster");
     }
 
     @Test
