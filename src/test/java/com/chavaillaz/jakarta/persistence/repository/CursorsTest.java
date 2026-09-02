@@ -273,6 +273,16 @@ class CursorsTest {
                     .isNotEqualTo(Cursors.fingerprint(Sort.parse("id,name")));
         }
 
+        @Test
+        @DisplayName("separates the orderings a 32 bit hash would have collided")
+        void separatesTheHashCollisions() {
+            assertThat("Aa".hashCode())
+                    .as("the classic pair, which the textual ordering of two such attributes would inherit")
+                    .isEqualTo("BB".hashCode());
+            assertThat(Cursors.fingerprint(Sort.parse("Aa,id")))
+                    .isNotEqualTo(Cursors.fingerprint(Sort.parse("BB,id")));
+        }
+
     }
 
 }

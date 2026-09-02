@@ -1,7 +1,12 @@
 package com.chavaillaz.jakarta.persistence.repository;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
@@ -17,6 +22,12 @@ import org.jspecify.annotations.Nullable;
  * requested position, the direction of the walk and the assembly of the resulting page.
  */
 public final class Cursors {
+
+    /**
+     * Number of bytes of the digest kept as the fingerprint of an ordering, wide enough for two orderings never
+     * to collide by accident while keeping the tokens short.
+     */
+    private static final int FINGERPRINT_LENGTH = 8;
 
     private Cursors() {
         // This utility class should not be instantiated
@@ -190,12 +201,34 @@ public final class Cursors {
 
     /**
      * Computes the fingerprint of an ordering, which binds a token to the ordering it was issued for.
+     * <p>
+     * A digest is used rather than the hash code of the textual ordering: two orderings sharing a 32 bit hash are
+     * trivially written down by hand, {@code "Aa"} and {@code "BB"} being the classic pair, and a colliding
+     * ordering of the same arity replays a token the seek predicate then compares against the wrong keys, which
+     * is precisely what the fingerprint exists to prevent. This remains an accident guard and not an integrity
+     * tag, a consumer being free to compute the fingerprint of any ordering it likes; reject forged positions by
+     * signing them in a {@link CursorCodec} instead.
      *
      * @param sort The ordering to fingerprint
      * @return The corresponding fingerprint
      */
     public static String fingerprint(Sort sort) {
-        return Integer.toHexString(sort.toString().hashCode());
+        return HexFormat.of().formatHex(digest(sort.toString()), 0, FINGERPRINT_LENGTH);
+    }
+
+    /**
+     * Digests the textual representation of an ordering.
+     *
+     * @param ordering The textual representation to digest
+     * @return The corresponding digest
+     */
+    private static byte[] digest(String ordering) {
+        try {
+            return MessageDigest.getInstance("SHA-256").digest(ordering.getBytes(UTF_8));
+        } catch (NoSuchAlgorithmException e) {
+            // Every Java platform is required to provide SHA-256, so this cannot happen on a conformant runtime
+            throw new IllegalStateException("The SHA-256 digest the cursor fingerprints are computed with is missing", e);
+        }
     }
 
     /**
