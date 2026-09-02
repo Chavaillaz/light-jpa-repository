@@ -130,6 +130,19 @@ class EntityQueriesTest extends HibernateTest {
     }
 
     @Test
+    @DisplayName("rejects scrolling on a key type no cursor can carry, on the very first page")
+    void rejectsAnUnusableCursorKey() {
+        assertThatIllegalArgumentException()
+                .as("ordering on the association itself makes a perfectly valid SQL ordering, but no cursor key")
+                .isThrownBy(() -> withQueries((queries, context) -> queries.scroll(context, null, null, Cursor.first(2, Sort.parse("roaster")))))
+                .withMessageContaining("Cannot build a cursor on the property roaster");
+
+        assertThat(withQueries((queries, context) -> queries.search(context, null, null, Pageable.of(0, 2, Sort.parse("roaster")))).items())
+                .as("the offset pagination keeps ordering on it, only a cursor needs to read the key back")
+                .hasSize(2);
+    }
+
+    @Test
     @DisplayName("rejects an ordering on an unknown property")
     void rejectsAnUnknownOrdering() {
         assertThatIllegalArgumentException()

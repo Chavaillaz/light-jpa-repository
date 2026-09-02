@@ -97,6 +97,15 @@ class CursorValuesTest {
     }
 
     @Test
+    @DisplayName("rejects formatting a key its own parsers cannot read back")
+    void rejectsFormattingAnUnsupportedType() {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> CursorValues.format("roaster", new Object()))
+                .withMessageContaining("Cannot build a cursor on the property roaster")
+                .withMessageContaining("java.lang.Object is not a supported cursor key type");
+    }
+
+    @Test
     @DisplayName("rejects an unsupported key type")
     void rejectsAnUnsupportedType() {
         assertThatIllegalArgumentException()

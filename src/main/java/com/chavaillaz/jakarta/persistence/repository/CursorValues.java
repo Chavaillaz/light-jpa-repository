@@ -63,15 +63,37 @@ public final class CursorValues {
      *                 cursor key
      * @return The corresponding textual representation
      * @throws IllegalArgumentException if the value is {@code null}, a nullable attribute being unusable as a
-     *                                  cursor key
+     *                                  cursor key, or if its type cannot be {@link #parse parsed back}
      */
     public static String format(String property, @Nullable Object value) {
         return switch (value) {
             case null -> throw new IllegalArgumentException("Cannot build a cursor on the null property %s: a cursor key must be non nullable".formatted(property));
             case Enum<?> constant -> constant.name();
             case Date date -> Long.toString(date.getTime());
-            default -> value.toString();
+            default -> parsable(property, value).toString();
         };
+    }
+
+    /**
+     * Checks that a value belongs to a type the parsers can read back, so that a key which is only unusable once
+     * the consumer sends it back is refused while the token is still being built.
+     * <p>
+     * Without it, {@code toString()} formats anything: ordering on an association, on an embeddable or on a
+     * converted attribute yields a first page carrying a perfectly valid looking token, which the very next call
+     * rejects as an unsupported cursor key type. The consumer is then stranded on a page it cannot leave, and the
+     * default representation of the value, which names its class and its identity hash, has meanwhile travelled
+     * out as part of an opaque token.
+     *
+     * @param property The property the value belongs to, used to name it in the error message
+     * @param value    The value to check
+     * @return The very same value
+     * @throws IllegalArgumentException if no parser can read the value back
+     */
+    private static Object parsable(String property, Object value) {
+        if (PARSERS.keySet().stream().noneMatch(type -> type.isInstance(value))) {
+            throw new IllegalArgumentException("Cannot build a cursor on the property %s: %s is not a supported cursor key type".formatted(property, value.getClass().getName()));
+        }
+        return value;
     }
 
     /**
