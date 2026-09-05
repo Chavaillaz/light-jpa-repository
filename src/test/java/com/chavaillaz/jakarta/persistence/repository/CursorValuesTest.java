@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -64,6 +65,25 @@ class CursorValuesTest {
 
         assertThat(CursorValues.format("roastedAt", date)).isEqualTo("1715000000000");
         assertThat(CursorValues.parse("1715000000000", Date.class)).isEqualTo(date);
+    }
+
+    @Test
+    @DisplayName("formats a timestamp whose precision is a whole number of milliseconds")
+    void formatsAWholeMillisecondTimestamp() {
+        Timestamp timestamp = new Timestamp(1_715_000_000_123L);
+
+        assertThat(CursorValues.format("roastedAt", timestamp)).isEqualTo("1715000000123");
+    }
+
+    @Test
+    @DisplayName("rejects a timestamp finer than the millisecond, which a truncated key would seek to the very same row")
+    void rejectsASubMillisecondTimestamp() {
+        Timestamp timestamp = new Timestamp(1_715_000_000_000L);
+        timestamp.setNanos(123_456_789);
+
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> CursorValues.format("roastedAt", timestamp))
+                .withMessageContaining("finer than the millisecond");
     }
 
     @Test

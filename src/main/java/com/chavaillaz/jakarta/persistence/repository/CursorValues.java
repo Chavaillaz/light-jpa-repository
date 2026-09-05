@@ -5,6 +5,7 @@ import static org.apache.commons.lang3.ClassUtils.primitiveToWrapper;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -28,6 +29,12 @@ import org.jspecify.annotations.Nullable;
  * type change fail loudly instead of binding a stale value.
  */
 public final class CursorValues {
+
+    /**
+     * Number of nanoseconds in a millisecond, which is the finest precision the epoch millisecond count a date key
+     * travels as can express.
+     */
+    private static final int NANOS_PER_MILLISECOND = 1_000_000;
 
     private static final Map<Class<?>, Function<String, Object>> PARSERS = Map.ofEntries(
             Map.entry(String.class, value -> value),
@@ -63,15 +70,41 @@ public final class CursorValues {
      *                 cursor key
      * @return The corresponding textual representation
      * @throws IllegalArgumentException if the value is {@code null}, a nullable attribute being unusable as a
-     *                                  cursor key, or if its type cannot be {@link #parse parsed back}
+     *                                  cursor key, if its type cannot be {@link #parse parsed back}, or if a date
+     *                                  carries a precision finer than the millisecond
      */
     public static String format(String property, @Nullable Object value) {
         return switch (value) {
             case null -> throw new IllegalArgumentException("Cannot build a cursor on the null property %s: a cursor key must be non nullable".formatted(property));
             case Enum<?> constant -> constant.name();
-            case Date date -> Long.toString(date.getTime());
+            case Date date -> Long.toString(epochMillis(property, date));
             default -> parsable(property, value).toString();
         };
+    }
+
+    /**
+     * Gets the epoch millisecond count of a date key, refusing the finer precision the token cannot carry.
+     * <p>
+     * A date travels as its epoch millisecond count, which is all a {@link Date} holds, but a column read into a
+     * {@link Timestamp} may hold microseconds or nanoseconds, which the databases keeping a timestamp at that
+     * precision do return. Truncating them would issue a token whose key is strictly before the boundary row
+     * itself, so the seek predicate would return that very row again: the next page starts where the previous one
+     * did, and a walk over such a column never advances. Rejecting the key surfaces that as a plain error while
+     * the token is still being built, rather than as a page repeating forever.
+     * <p>
+     * Order on an attribute mapped to {@link Instant} or to {@link LocalDateTime}, whose keys carry
+     * their nanoseconds, or teach a {@link CursorKeyCodec} how to represent the precision of that column.
+     *
+     * @param property The property the value belongs to, used to name it in the error message
+     * @param date     The date to read the epoch millisecond count of
+     * @return The corresponding epoch millisecond count
+     * @throws IllegalArgumentException if the date carries a precision finer than the millisecond
+     */
+    private static long epochMillis(String property, Date date) {
+        if (date instanceof Timestamp timestamp && timestamp.getNanos() % NANOS_PER_MILLISECOND != 0) {
+            throw new IllegalArgumentException("Cannot build a cursor on the property %s: the timestamp %s is finer than the millisecond a date key travels as".formatted(property, timestamp));
+        }
+        return date.getTime();
     }
 
     /**
