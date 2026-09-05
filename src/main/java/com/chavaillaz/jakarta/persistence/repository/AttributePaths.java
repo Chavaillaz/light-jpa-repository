@@ -5,6 +5,7 @@ import static jakarta.persistence.criteria.JoinType.LEFT;
 import jakarta.persistence.criteria.From;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Path;
+import jakarta.persistence.metamodel.EmbeddableType;
 import jakarta.persistence.metamodel.SingularAttribute;
 import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Field;
@@ -87,6 +88,12 @@ public final class AttributePaths {
      * being derived without the {@code order by} clause. A left join keeps it, the database then placing its
      * {@code null} key first or last depending on its own null ordering.
      * <p>
+     * An intermediate embeddable is joined as well, although its attributes live in the very same row and its
+     * join therefore costs no join at all in the emitted SQL. Only a {@link From} can be left joined, and
+     * {@link Path#get(String)} on an embeddable yields a plain path: an association reached through one, such as
+     * {@code shipment.carrier.name}, would otherwise be the implicit inner join this method exists to avoid, and
+     * would drop the rows whose carrier is not set while still counting them.
+     * <p>
      * The joins the query already has are reused rather than created anew for each key, so that ordering on two
      * attributes of the same association, ordering and seeking on the same one, or ordering on the association a
      * restriction or a criteria already joins, does not join it twice; see {@link #reusedJoin(From, String)}.
@@ -95,7 +102,7 @@ public final class AttributePaths {
      * @param attribute    The name of the attribute to resolve
      * @param intermediate {@code true} when the attribute is not the last one of the path, and is therefore
      *                     navigated rather than read
-     * @return The corresponding path, a join for an intermediate association
+     * @return The corresponding path, a join for an intermediate association or embeddable
      * @throws IllegalArgumentException if the attribute does not exist on the parent path
      */
     static Path<?> step(Path<?> parent, String attribute, boolean intermediate) {
@@ -106,7 +113,7 @@ public final class AttributePaths {
         if (intermediate
                 && parent instanceof From<?, ?> owner
                 && path.getModel() instanceof SingularAttribute<?, ?> singular
-                && singular.isAssociation()) {
+                && (singular.isAssociation() || singular.getType() instanceof EmbeddableType<?>)) {
             return reusedJoin(owner, attribute);
         }
         return path;

@@ -325,14 +325,16 @@ public class EntityOrdering<E> {
         }
 
         SingularAttribute<? super E, ?> idAttribute = entityMetamodel.getId(entityMetamodel.getIdType().getJavaType());
-        Path<?> idPath = root.get(idAttribute);
 
-        // Embedded identifier, ordered on each of its components
+        // Embedded identifier, ordered on each of its components, navigated through the very same step a requested
+        // ordering on one of them navigates it with, so that both resolve to the same paths and the identifier is
+        // appended once rather than twice, in a direction the repository may not have asked for
         if (idAttribute.getType() instanceof EmbeddableType<?> embeddable) {
+            Path<?> idPath = AttributePaths.step(root, idAttribute.getName(), true);
             return sortedByName(embeddable.getSingularAttributes()).map(attribute -> idPath.get(attribute.getName()));
         }
 
-        return Stream.of(idPath);
+        return Stream.of(root.get(idAttribute));
     }
 
     /**
