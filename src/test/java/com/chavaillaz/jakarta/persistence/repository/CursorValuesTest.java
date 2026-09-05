@@ -48,6 +48,10 @@ class CursorValuesTest {
                 Arguments.of(OffsetDateTime.class, OffsetDateTime.parse("2024-05-05T06:30:00+02:00")),
                 Arguments.of(ZonedDateTime.class, ZonedDateTime.parse("2024-05-05T06:30:00+02:00")),
                 Arguments.of(Duration.class, Duration.ofMinutes(4)),
+                Arguments.of(Date.class, new Date(1_715_000_000_000L)),
+                Arguments.of(Timestamp.class, new Timestamp(1_715_000_000_123L)),
+                Arguments.of(java.sql.Date.class, new java.sql.Date(1_715_000_000_000L)),
+                Arguments.of(java.sql.Time.class, new java.sql.Time(1_715_000_000_000L)),
         };
     }
 

@@ -26,7 +26,10 @@ import org.jspecify.annotations.Nullable;
  * Java type of the corresponding attribute, taken from the metamodel when the seek predicate is built.
  * <p>
  * The type is deliberately not stored in the token: relying on the metamodel keeps the tokens short and makes a
- * type change fail loudly instead of binding a stale value.
+ * type change fail loudly instead of binding a stale value. What {@link #format} writes and what {@link #parse}
+ * reads must therefore agree on every type a provider may hand over: a value formatted as a key of a type nothing
+ * can read back would issue a first page whose token the very next call rejects, stranding the consumer on a page
+ * it cannot leave.
  */
 public final class CursorValues {
 
@@ -56,7 +59,12 @@ public final class CursorValues {
             Map.entry(OffsetDateTime.class, OffsetDateTime::parse),
             Map.entry(ZonedDateTime.class, ZonedDateTime::parse),
             Map.entry(Duration.class, Duration::parse),
-            Map.entry(Date.class, value -> new Date(parseLong(value))));
+            // Every date subtype a provider hands back is read from the very same epoch millisecond count format
+            // writes, the declared type of the attribute being what decides which one the key is bound as
+            Map.entry(Date.class, value -> new Date(parseLong(value))),
+            Map.entry(Timestamp.class, value -> new Timestamp(parseLong(value))),
+            Map.entry(java.sql.Date.class, value -> new java.sql.Date(parseLong(value))),
+            Map.entry(java.sql.Time.class, value -> new java.sql.Time(parseLong(value))));
 
     private CursorValues() {
         // This utility class should not be instantiated

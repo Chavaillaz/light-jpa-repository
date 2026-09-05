@@ -11,8 +11,9 @@ import org.jspecify.annotations.Nullable;
  * therefore independent extension points: overriding one does not require overriding the other.
  * <p>
  * {@link CursorValues} covers every attribute type supported out of the box. Override this contract to support an
- * attribute type it does not, such as a legacy {@code java.sql.Date} mapping or a custom identifier type,
- * typically by delegating to {@link CursorValues} for every other type.
+ * attribute type it does not, such as a custom identifier type or one behind an attribute converter, or to carry
+ * a precision the default representation drops, typically by delegating to {@link CursorValues} for every other
+ * type.
  */
 public interface CursorKeyCodec {
 
