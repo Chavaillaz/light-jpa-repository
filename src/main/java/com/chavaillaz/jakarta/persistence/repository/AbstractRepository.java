@@ -67,7 +67,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     protected final EntityManager entityManager;
 
     /**
-     * The type of the managed entity, resolved from the type parameters of the subclass.
+     * The type of the managed entity, as the subclass declared it to the constructor.
      */
     protected final Class<E> entityType;
 
