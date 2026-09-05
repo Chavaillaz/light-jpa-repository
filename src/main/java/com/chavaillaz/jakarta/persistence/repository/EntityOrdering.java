@@ -194,9 +194,10 @@ public class EntityOrdering<E> {
      * caller.
      * <p>
      * An entity attribute path already resolved, such as one built by {@link SortCriterion#asc(Attribute[])} from
-     * the static metamodel, is also accepted as is, whether or not it is declared as the target of a searchable
-     * property: it is compile time safe by construction rather than API consumer supplied, and it can only reach
-     * an attribute a declared property already exposes under its own alias, so accepting it widens no restriction.
+     * the static metamodel, is accepted as is under whatever public alias a searchable property declares it: it is
+     * compile time safe by construction rather than API consumer supplied, and it reaches an attribute a declared
+     * property already exposes, so accepting it widens no restriction. An attribute no property declares stays
+     * refused, the metamodel proving that it exists on the entity and not that the repository exposes it.
      *
      * @param context  The repository the query is written for
      * @param property The property to resolve
