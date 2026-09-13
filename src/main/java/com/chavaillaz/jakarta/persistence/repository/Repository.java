@@ -4,6 +4,7 @@ import static com.chavaillaz.jakarta.persistence.repository.Pageable.sortedBy;
 import static com.chavaillaz.jakarta.persistence.repository.Pageable.unpaged;
 
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.OptimisticLockException;
 import java.util.Collection;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -330,11 +331,13 @@ public interface Repository<E extends Identifiable<I>, I> {
      * Deletes the given entity.
      * <p>
      * A detached entity is re-attached beforehand, with a fresh lookup rather than a merge, so that deleting it
-     * cannot silently persist local field edits carried by a stale detached copy first.
+     * cannot silently persist local field edits carried by a stale detached copy first. Its version is still
+     * checked as a merge would check it, so that a stale copy cannot delete a row another transaction changed.
      *
      * @param entity The entity to delete
      * @throws IllegalArgumentException if the entity is transient, having no identifier yet
      * @throws NoSuchElementException   if the entity is detached and no entity with its identifier exists
+     * @throws OptimisticLockException  if the entity is versioned and was modified since its detached copy was read
      */
     void delete(E entity);
 

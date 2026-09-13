@@ -6,6 +6,8 @@ import static jakarta.transaction.Transactional.TxType.MANDATORY;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.OptimisticLockException;
+import jakarta.persistence.PersistenceUnitUtil;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Order;
@@ -916,7 +918,37 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
 
     @Override
     public void delete(E entity) {
-        entityManager.remove(reattach(entity));
+        E managedEntity = reattach(entity);
+        if (managedEntity != entity) {
+            requireCurrentVersion(entity, managedEntity);
+        }
+        entityManager.remove(managedEntity);
+    }
+
+    /**
+     * Checks that a detached entity still carries the version of the row it is about to delete, as a merge would.
+     * <p>
+     * Re-attaching looks the entity up, so the managed copy holds the version the database has now, and that is
+     * the version the deletion is then checked against: without this, a copy read before another transaction
+     * committed a change would silently delete the row carrying that change, which is precisely what a version
+     * exists to prevent. A reference that was never initialised carries no state, and has no version to compare.
+     *
+     * @param detached The detached entity the caller asked to delete
+     * @param managed  The managed copy re-attaching it
+     * @throws OptimisticLockException if the entity is versioned and the detached copy carries another version
+     */
+    private void requireCurrentVersion(E detached, E managed) {
+        PersistenceUnitUtil persistenceUnit = entityManager.getEntityManagerFactory().getPersistenceUnitUtil();
+        if (!persistenceUnit.isLoaded(detached)) {
+            // Reading the version of an uninitialised proxy would initialise it, which a closed session cannot do
+            return;
+        }
+
+        Object version = persistenceUnit.getVersion(detached);
+        if (version != null && !version.equals(persistenceUnit.getVersion(managed))) {
+            throw new OptimisticLockException("Cannot delete the entity with the identifier %s in %s, modified since its detached copy was read"
+                    .formatted(managed.getId(), getClass().getSimpleName()), null, detached);
+        }
     }
 
 }

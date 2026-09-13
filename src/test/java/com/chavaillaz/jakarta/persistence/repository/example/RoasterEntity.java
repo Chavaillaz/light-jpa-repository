@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,6 +32,12 @@ public class RoasterEntity implements Identifiable<Long> {
     private String name;
 
     private String country;
+
+    /**
+     * Checked when a detached copy is deleted, so that a stale one cannot delete a roaster changed in between.
+     */
+    @Version
+    private long version;
 
     @OneToMany(mappedBy = "roaster")
     private List<CoffeeEntity> coffees = new ArrayList<>();
