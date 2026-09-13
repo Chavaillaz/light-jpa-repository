@@ -12,6 +12,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
+import java.time.Year;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
 import java.util.Date;
@@ -56,8 +58,10 @@ public final class CursorValues {
             Map.entry(LocalDate.class, LocalDate::parse),
             Map.entry(LocalTime.class, LocalTime::parse),
             Map.entry(LocalDateTime.class, LocalDateTime::parse),
+            Map.entry(OffsetTime.class, OffsetTime::parse),
             Map.entry(OffsetDateTime.class, OffsetDateTime::parse),
             Map.entry(ZonedDateTime.class, ZonedDateTime::parse),
+            Map.entry(Year.class, Year::parse),
             Map.entry(Duration.class, Duration::parse),
             // Every date subtype a provider hands back is read from the very same epoch millisecond count format
             // writes, the declared type of the attribute being what decides which one the key is bound as

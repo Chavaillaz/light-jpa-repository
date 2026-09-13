@@ -12,6 +12,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
+import java.time.OffsetTime;
+import java.time.Year;
 import java.time.ZonedDateTime;
 import java.util.Date;
 import java.util.UUID;
@@ -45,8 +47,10 @@ class CursorValuesTest {
                 Arguments.of(LocalDate.class, LocalDate.of(2024, 5, 5)),
                 Arguments.of(LocalTime.class, LocalTime.of(6, 30)),
                 Arguments.of(LocalDateTime.class, LocalDateTime.of(2024, 5, 5, 6, 30)),
+                Arguments.of(OffsetTime.class, OffsetTime.parse("06:30:00+02:00")),
                 Arguments.of(OffsetDateTime.class, OffsetDateTime.parse("2024-05-05T06:30:00+02:00")),
                 Arguments.of(ZonedDateTime.class, ZonedDateTime.parse("2024-05-05T06:30:00+02:00")),
+                Arguments.of(Year.class, Year.of(2024)),
                 Arguments.of(Duration.class, Duration.ofMinutes(4)),
                 Arguments.of(Date.class, new Date(1_715_000_000_000L)),
                 Arguments.of(Timestamp.class, new Timestamp(1_715_000_000_123L)),
