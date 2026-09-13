@@ -83,7 +83,7 @@ public final class CursorValues {
      */
     public static String format(String property, @Nullable Object value) {
         return switch (value) {
-            case null -> throw new IllegalArgumentException("Cannot build a cursor on the null property %s: a cursor key must be non nullable".formatted(property));
+            case null -> throw new IllegalArgumentException("Cannot build a cursor on null property %s: a cursor key must be non nullable".formatted(property));
             case Enum<?> constant -> constant.name();
             case Date date -> Long.toString(epochMillis(property, date));
             default -> parsable(property, value).toString();
@@ -105,7 +105,7 @@ public final class CursorValues {
      */
     private static long epochMillis(String property, Date date) {
         if (date instanceof Timestamp timestamp && timestamp.getNanos() % NANOS_PER_MILLISECOND != 0) {
-            throw new IllegalArgumentException("Cannot build a cursor on the property %s: the timestamp %s is finer than the millisecond a date key travels as".formatted(property, timestamp));
+            throw new IllegalArgumentException("Cannot build a cursor on property %s: timestamp %s is finer than the millisecond a date key travels as".formatted(property, timestamp));
         }
         return date.getTime();
     }
@@ -122,7 +122,7 @@ public final class CursorValues {
      */
     private static Object parsable(String property, Object value) {
         if (PARSERS.keySet().stream().noneMatch(type -> type.isInstance(value))) {
-            throw new IllegalArgumentException("Cannot build a cursor on the property %s: %s is not a supported cursor key type".formatted(property, value.getClass().getName()));
+            throw new IllegalArgumentException("Cannot build a cursor on property %s: %s is not a supported cursor key type".formatted(property, value.getClass().getName()));
         }
         return value;
     }
@@ -159,7 +159,7 @@ public final class CursorValues {
         } catch (RuntimeException e) {
             // The value comes from a token an API consumer sent back, so whatever the parser throws is a malformed
             // cursor, which the API layer answers with a 400 Bad Request
-            throw new IllegalArgumentException("Invalid cursor key value %s for the type %s".formatted(value, type.getName()), e);
+            throw new IllegalArgumentException("Invalid cursor key value %s for type %s".formatted(value, type.getName()), e);
         }
     }
 

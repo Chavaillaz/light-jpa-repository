@@ -3,6 +3,7 @@ package com.chavaillaz.jakarta.persistence.repository;
 import static com.chavaillaz.jakarta.persistence.repository.Pageable.sortedBy;
 import static com.chavaillaz.jakarta.persistence.repository.Pageable.unpaged;
 import static jakarta.transaction.Transactional.TxType.MANDATORY;
+import static java.lang.Math.min;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -176,15 +177,23 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
         CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
         CriteriaQuery<Integer> query = criteriaBuilder.createQuery(Integer.class);
         Root<E> root = query.from(entityType);
-        query.select(criteriaBuilder.literal(1)).where(criteriaBuilder.equal(root.get(idAttribute.get()), id));
+        query.select(criteriaBuilder.literal(1))
+                .where(criteriaBuilder.equal(root.get(idAttribute.get()), id));
 
         // Listed since getSingleResult() throws when nothing matches
-        return !entityManager.createQuery(query).setMaxResults(1).getResultList().isEmpty();
+        return !entityManager.createQuery(query)
+                .setMaxResults(1)
+                .getResultList()
+                .isEmpty();
     }
 
     @Override
     public List<E> findAllById(Collection<I> ids) {
-        List<I> distinctIds = ids.stream().filter(Objects::nonNull).distinct().toList();
+        List<I> distinctIds = ids.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
         if (distinctIds.isEmpty()) {
             return List.of();
         }
@@ -192,16 +201,22 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
         Optional<String> idAttribute = singleIdAttributeName();
         if (idAttribute.isEmpty()) {
             // An identifier class spreads the identifier over several attributes, which no single predicate compares
-            return distinctIds.stream().map(id -> entityManager.find(entityType, id)).filter(Objects::nonNull).toList();
+            return distinctIds.stream()
+                    .map(id -> entityManager.find(entityType, id))
+                    .filter(Objects::nonNull)
+                    .toList();
         }
 
         // Looked up by chunks, the databases rejecting a long IN list; the hook is read once and validated, since a
         // non-positive size would never advance the loop
-        int batchSize = requirePositive(idBatchSize(), "idBatchSize");
+        int batchSize = idBatchSize();
+        if (batchSize < 1) {
+            throw new IllegalArgumentException("The batch size must be strictly positive, got %d".formatted(batchSize));
+        }
 
         List<E> entities = new ArrayList<>(distinctIds.size());
         for (int start = 0; start < distinctIds.size(); start += batchSize) {
-            entities.addAll(findAllByIdChunk(distinctIds.subList(start, Math.min(start + batchSize, distinctIds.size())), idAttribute.get()));
+            entities.addAll(findAllByIdChunk(distinctIds.subList(start, min(start + batchSize, distinctIds.size())), idAttribute.get()));
         }
         return List.copyOf(entities);
     }
@@ -210,9 +225,11 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
         CriteriaBuilder criteriaBuilder = entityManager.getCriteriaBuilder();
         CriteriaQuery<E> query = criteriaBuilder.createQuery(entityType);
         Root<E> root = query.from(entityType);
-        query.select(root).where(root.get(idAttribute).in(ids));
+        query.select(root)
+                .where(root.get(idAttribute).in(ids));
 
-        return entityManager.createQuery(query).getResultList();
+        return entityManager.createQuery(query)
+                .getResultList();
     }
 
     /**
@@ -760,7 +777,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
 
         E managedEntity = entityManager.find(entityType, id);
         if (managedEntity == null) {
-            throw new NoSuchElementException("No entity found with the identifier %s in %s".formatted(id, getClass().getSimpleName()));
+            throw new NoSuchElementException("No entity found with identifier %s in %s".formatted(id, getClass().getSimpleName()));
         }
         return managedEntity;
     }
@@ -788,24 +805,39 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     }
 
     /**
-     * Saves the given entities, flushing and clearing the persistence context every {@link #saveBatchSize()}
+     * Saves the given entities, flushing and clearing the persistence context every {@value #DEFAULT_SAVE_BATCH_SIZE}
+     * entities.
+     *
+     * @param entities The entities to save
+     * @return The number of saved entities
+     * @see #saveAllInBatches(Collection, int)
+     */
+    public int saveAllInBatches(Collection<E> entities) {
+        return saveAllInBatches(entities, DEFAULT_SAVE_BATCH_SIZE);
+    }
+
+    /**
+     * Saves the given entities, flushing and clearing the persistence context every {@code batchSize}
      * entities, for the bulk loads a plain {@link #saveAll(Collection)} cannot hold in memory.
      * <p>
      * Each flush dirty checks every entity the persistence context holds, so saving without clearing costs the
      * square of the number of entities; by batches, both the memory and that cost stay bounded, and
-     * {@code hibernate.jdbc.batch_size} can group the statements.
+     * {@code hibernate.jdbc.batch_size} can group the statements when set to match {@code batchSize}.
      * <p>
      * Clearing detaches <em>every</em> entity of the persistence context, not only the saved ones, and the
      * generated identifiers are the only state guaranteed on the given entities: call this from a method owning its
      * transaction and holding nothing else. Only the number of saved entities is returned, a detached entity being
      * merged into a copy the caller never held, which is what holding a batch of would defeat.
      *
-     * @param entities The entities to save
+     * @param entities  The entities to save
+     * @param batchSize The number of entities saved between two flushes, which must be strictly positive
      * @return The number of saved entities
+     * @throws IllegalArgumentException if {@code batchSize} is not strictly positive
      */
-    public int saveAllInBatches(Collection<E> entities) {
-        // Read once and validated, a size of zero failing on the modulo and a negative one never flushing
-        int batchSize = requirePositive(saveBatchSize(), "saveBatchSize");
+    public int saveAllInBatches(Collection<E> entities, int batchSize) {
+        if (batchSize < 1) {
+            throw new IllegalArgumentException("The batch size must be strictly positive, got %d".formatted(batchSize));
+        }
 
         int saved = 0;
         for (E entity : entities) {
@@ -824,35 +856,6 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     private void flushAndClear() {
         entityManager.flush();
         entityManager.clear();
-    }
-
-    /**
-     * Checks that the value a batch size hook returned can drive a loop, so that a broken override fails on the
-     * spot instead of hanging or throwing further away.
-     *
-     * @param size The size the hook returned
-     * @param hook The name of the hook, to name it in the error message
-     * @return The very same size
-     * @throws IllegalArgumentException if the size is not strictly positive
-     */
-    private static int requirePositive(int size, String hook) {
-        if (size < 1) {
-            throw new IllegalArgumentException("The batch size returned by %s() must be strictly positive, got %d".formatted(hook, size));
-        }
-        return size;
-    }
-
-    /**
-     * Gets the number of entities saved between two flushes by {@link #saveAllInBatches(Collection)},
-     * {@value #DEFAULT_SAVE_BATCH_SIZE} by default.
-     * <p>
-     * Override to match the {@code hibernate.jdbc.batch_size} of the persistence unit, the statements only being
-     * grouped by the driver up to that size.
-     *
-     * @return The number of entities per batch, which must be strictly positive, {@link #saveAllInBatches(Collection)} rejecting anything else
-     */
-    protected int saveBatchSize() {
-        return DEFAULT_SAVE_BATCH_SIZE;
     }
 
     @Override
@@ -889,8 +892,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
 
         Object version = persistenceUnit.getVersion(detached);
         if (version != null && !version.equals(persistenceUnit.getVersion(managed))) {
-            throw new OptimisticLockException("Cannot delete the entity with the identifier %s in %s, modified since its detached copy was read"
-                    .formatted(managed.getId(), getClass().getSimpleName()), null, detached);
+            throw new OptimisticLockException("Cannot delete entity with identifier %s in %s, modified since its detached copy was read".formatted(managed.getId(), getClass().getSimpleName()), null, detached);
         }
     }
 

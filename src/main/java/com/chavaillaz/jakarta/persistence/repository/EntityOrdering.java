@@ -92,13 +92,13 @@ public class EntityOrdering<E> {
         Deque<String> names = new ArrayDeque<>();
         for (Path<?> path = asPath(expression); path.getParentPath() != null; path = path.getParentPath()) {
             if (!(path.getModel() instanceof Attribute<?, ?> attribute)) {
-                throw new IllegalArgumentException("Cannot use the expression " + expression + " as a cursor key");
+                throw new IllegalArgumentException("Cannot use expression " + expression + " as a cursor key");
             }
             names.addFirst(attribute.getName());
         }
         if (names.isEmpty()) {
             // The root has no parent path, and would otherwise surface later as a sort property with no name
-            throw new IllegalArgumentException("Cannot order on the entity " + expression + " itself, an attribute is required");
+            throw new IllegalArgumentException("Cannot order on entity " + expression + " itself, an attribute is required");
         }
         return String.join(SortCriterion.NESTING_SEPARATOR, names);
     }
@@ -210,7 +210,7 @@ public class EntityOrdering<E> {
 
         String path = properties.get(property);
         if (path == null) {
-            throw new IllegalArgumentException("Cannot sort or filter on the unknown property " + property);
+            throw new IllegalArgumentException("Cannot sort or filter on unknown property " + property);
         }
         return path;
     }
@@ -237,11 +237,11 @@ public class EntityOrdering<E> {
             } catch (IllegalArgumentException | IllegalStateException e) {
                 // What Path#get raises for an unknown attribute, and for one reached through a basic attribute, such
                 // as name.length, both of which an API consumer is free to send
-                throw new IllegalArgumentException("Cannot sort on the unknown property " + property, e);
+                throw new IllegalArgumentException("Cannot sort on unknown property " + property, e);
             }
             if (path.getModel() instanceof PluralAttribute) {
                 // Ordering on a to-many association would join it, duplicating the entity once per child
-                throw new IllegalArgumentException("Cannot sort on the collection property " + property);
+                throw new IllegalArgumentException("Cannot sort on collection property " + property);
             }
         }
         return path;
@@ -321,7 +321,7 @@ public class EntityOrdering<E> {
             Type<?> type = singular.getType();
 
             if (!(type instanceof EmbeddableType<?>) && singular.isOptional()) {
-                throw new IllegalArgumentException("Cannot build a cursor on the nullable property %s: a cursor key must be non nullable".formatted(property));
+                throw new IllegalArgumentException("Cannot build a cursor on nullable property %s: a cursor key must be non nullable".formatted(property));
             }
             if (type instanceof ManagedType<?> managed) {
                 owner = managed;

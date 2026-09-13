@@ -75,7 +75,10 @@ public class Base64CursorCodec implements CursorCodec {
                 throw new IllegalArgumentException("Unknown cursor direction " + direction);
             }
             return new CursorPosition(
-                    Arrays.stream(parts).skip(1).map(Base64CursorCodec::decodeValue).toList(),
+                    Arrays.stream(parts)
+                            .skip(1)
+                            .map(Base64CursorCodec::decodeValue)
+                            .toList(),
                     direction == BACKWARD,
                     header.substring(1));
         } catch (RuntimeException e) {

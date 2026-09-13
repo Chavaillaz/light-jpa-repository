@@ -179,7 +179,7 @@ class CoffeeBulkTest extends HibernateTest {
                     .mapToObj(index -> coffee("Batch " + index))
                     .toList();
 
-            int saved = inTransaction(entityManager -> new SmallBatchRepository(entityManager).saveAllInBatches(batch));
+            int saved = inTransaction(entityManager -> new SmallBatchRepository(entityManager).saveAllInBatches(batch, 10));
 
             assertThat(saved).isEqualTo(25);
             assertThat(remainingCount()).isEqualTo(32);
@@ -194,7 +194,7 @@ class CoffeeBulkTest extends HibernateTest {
                     .mapToObj(index -> coffee("Partial " + index))
                     .toList();
 
-            inTransaction(entityManager -> new SmallBatchRepository(entityManager).saveAllInBatches(batch));
+            inTransaction(entityManager -> new SmallBatchRepository(entityManager).saveAllInBatches(batch, 10));
 
             assertThat(remainingCount()).isEqualTo(14);
         }
@@ -202,20 +202,20 @@ class CoffeeBulkTest extends HibernateTest {
         @Test
         @DisplayName("saves nothing and flushes nothing for an empty collection")
         void savesNothingForAnEmptyCollection() {
-            int saved = inTransaction(entityManager -> new SmallBatchRepository(entityManager).saveAllInBatches(List.of()));
+            int saved = inTransaction(entityManager -> new SmallBatchRepository(entityManager).saveAllInBatches(List.of(), 10));
 
             assertThat(saved).isZero();
             assertThat(remainingCount()).isEqualTo(7);
         }
 
         @Test
-        @DisplayName("rejects a batch size an override left non positive, instead of throwing further away")
+        @DisplayName("rejects a non-positive batch size, instead of throwing further away")
         void rejectsANonPositiveBatchSize() {
             List<CoffeeEntity> batch = List.of(coffee("Unbatchable"));
 
             assertThatExceptionOfType(IllegalArgumentException.class)
-                    .isThrownBy(() -> inTransaction(entityManager -> new BrokenBatchRepository(entityManager).saveAllInBatches(batch)))
-                    .withMessageContaining("saveBatchSize");
+                    .isThrownBy(() -> inTransaction(entityManager -> new CoffeeRepositoryJpa(entityManager).saveAllInBatches(batch, 0)))
+                    .withMessageContaining("strictly positive");
         }
 
     }
@@ -241,24 +241,19 @@ class CoffeeBulkTest extends HibernateTest {
         void rejectsANonPositiveChunkSize() {
             assertThatExceptionOfType(IllegalArgumentException.class)
                     .isThrownBy(() -> inTransaction(entityManager -> new BrokenBatchRepository(entityManager).findAllById(List.of(1L))))
-                    .withMessageContaining("idBatchSize");
+                    .withMessageContaining("strictly positive");
         }
 
     }
 
     /**
-     * A repository flushing every ten entities and looking the identifiers up three at a time, so that both
-     * batchings are exercised without needing the fifty entities and the thousand identifiers of the defaults.
+     * A repository looking the identifiers up three at a time, so that chunking is exercised without needing the
+     * thousand identifiers of the default.
      */
     static class SmallBatchRepository extends CoffeeRepositoryJpa {
 
         SmallBatchRepository(EntityManager entityManager) {
             super(entityManager);
-        }
-
-        @Override
-        protected int saveBatchSize() {
-            return 10;
         }
 
         @Override
@@ -269,18 +264,13 @@ class CoffeeBulkTest extends HibernateTest {
     }
 
     /**
-     * A repository whose batch size hooks are broken, which used to hang the identifier lookup and to fail the
-     * batched save on a division by zero rather than on the actual mistake.
+     * A repository whose identifier chunk size hook is broken, which used to hang the identifier lookup rather
+     * than to fail on the actual mistake.
      */
     static class BrokenBatchRepository extends CoffeeRepositoryJpa {
 
         BrokenBatchRepository(EntityManager entityManager) {
             super(entityManager);
-        }
-
-        @Override
-        protected int saveBatchSize() {
-            return 0;
         }
 
         @Override

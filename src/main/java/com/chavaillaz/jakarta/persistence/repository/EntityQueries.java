@@ -216,12 +216,7 @@ public class EntityQueries<E> {
      * @param criteria        The criteria to apply, or {@code null}
      * @return The corresponding predicate
      */
-    protected Predicate semiJoin(
-            CriteriaBuilder criteriaBuilder,
-            CommonAbstractCriteria query,
-            Root<E> root,
-            @Nullable Restriction<? super E> restriction,
-            @Nullable Criteria<E> criteria) {
+    protected Predicate semiJoin(CriteriaBuilder criteriaBuilder, CommonAbstractCriteria query, Root<E> root, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
         Subquery<Integer> matching = query.subquery(Integer.class);
         Root<E> matched = matching.from(entityType);
 
@@ -248,12 +243,7 @@ public class EntityQueries<E> {
      * @param criteria        The additional criteria to apply, or {@code null}
      * @return The corresponding predicate, or {@code null} when neither is given
      */
-    protected @Nullable Predicate toPredicate(
-            CriteriaBuilder criteriaBuilder,
-            CommonAbstractCriteria query,
-            Root<E> root,
-            @Nullable Restriction<? super E> restriction,
-            @Nullable Criteria<E> criteria) {
+    protected @Nullable Predicate toPredicate(CriteriaBuilder criteriaBuilder, CommonAbstractCriteria query, Root<E> root, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
         Predicate predicate = null;
         if (restriction != null) {
             predicate = restriction.toPredicate(root, criteriaBuilder);
@@ -315,10 +305,11 @@ public class EntityQueries<E> {
 
         return SelectionSpecification.create(relatedType)
                 .restrict(restriction == null ? unrestricted() : restriction)
-                .augment((criteriaBuilder, query, root) -> query.orderBy(relatedOrdering
-                        .getIdPaths(context.entityManager(), root)
-                        .map(criteriaBuilder::asc)
-                        .toList()))
+                .augment((criteriaBuilder, query, root) -> query.orderBy(
+                        relatedOrdering
+                                .getIdPaths(context.entityManager(), root)
+                                .map(criteriaBuilder::asc)
+                                .toList()))
                 .createQuery(context.entityManager())
                 .getResultList();
     }
@@ -360,7 +351,11 @@ public class EntityQueries<E> {
         }
 
         // Left unordered, and listed since getSingleResult() throws when nothing matches
-        return !context.entityManager().createQuery(query).setMaxResults(1).getResultList().isEmpty();
+        return !context.entityManager()
+                .createQuery(query)
+                .setMaxResults(1)
+                .getResultList()
+                .isEmpty();
     }
 
     /**
@@ -387,7 +382,9 @@ public class EntityQueries<E> {
             delete.where(predicate);
         }
 
-        return context.entityManager().createQuery(delete).executeUpdate();
+        return context.entityManager()
+                .createQuery(delete)
+                .executeUpdate();
     }
 
     /**
@@ -473,7 +470,8 @@ public class EntityQueries<E> {
         Keysets.selectAlongside(query, root, resolvedSort);
         query.orderBy(Keysets.toOrders(criteriaBuilder, root, direction));
 
-        List<Tuple> rows = context.entityManager().createQuery(query)
+        List<Tuple> rows = context.entityManager()
+                .createQuery(query)
                 .setMaxResults(cursor.limit())
                 .getResultList();
 

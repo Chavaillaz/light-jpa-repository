@@ -157,7 +157,7 @@ public final class AttributePaths {
         try {
             return accessor instanceof Method getter ? getter.invoke(owner) : ((Field) accessor).get(owner);
         } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Cannot read the attribute " + attribute, e);
+            throw new IllegalStateException("Cannot read attribute " + attribute, e);
         }
     }
 
@@ -187,7 +187,7 @@ public final class AttributePaths {
                 // Try the superclass
             }
         }
-        throw new IllegalArgumentException("Cannot read the attribute " + attribute + " on " + type);
+        throw new IllegalArgumentException("Cannot read attribute " + attribute + " on " + type);
     }
 
     private static <A extends AccessibleObject> A accessible(A accessor, String attribute) {
@@ -196,7 +196,7 @@ public final class AttributePaths {
             return accessor;
         } catch (InaccessibleObjectException | SecurityException e) {
             // Thrown by setAccessible itself, neither of them being a ReflectiveOperationException
-            throw new IllegalStateException("Cannot read the attribute " + attribute, e);
+            throw new IllegalStateException("Cannot read attribute " + attribute, e);
         }
     }
 
