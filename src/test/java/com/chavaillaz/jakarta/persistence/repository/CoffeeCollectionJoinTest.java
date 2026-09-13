@@ -2,11 +2,15 @@ package com.chavaillaz.jakarta.persistence.repository;
 
 import static com.chavaillaz.jakarta.persistence.repository.example.CoffeeRepositoryJpa.joiningNotes;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.BOURBON_POINTU;
+import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.ETHIOPIA;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.GEISHA;
+import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.HARRAR;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.SIDAMO;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.YIRGACHEFFE;
+import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.roaster;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import jakarta.persistence.criteria.Join;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiFunction;
@@ -17,8 +21,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity;
+import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity_;
 import com.chavaillaz.jakarta.persistence.repository.example.Coffees;
 import com.chavaillaz.jakarta.persistence.repository.example.RoasterEntity;
+import com.chavaillaz.jakarta.persistence.repository.example.RoasterEntity_;
 import com.chavaillaz.jakarta.persistence.repository.example.TastingNoteEntity;
 
 /**
@@ -59,6 +65,18 @@ class CoffeeCollectionJoinTest extends HibernateTest {
 
     private static List<String> namesOf(List<CoffeeEntity> coffees) {
         return coffees.stream().map(CoffeeEntity::getName).toList();
+    }
+
+    /**
+     * An entity join, which follows no association: a coffee is returned once per roaster of its origin, exactly
+     * as a collection join returns it once per matching child.
+     */
+    private static Criteria<CoffeeEntity> roastedAtOrigin() {
+        return (criteriaBuilder, query, root) -> {
+            Join<CoffeeEntity, RoasterEntity> roaster = root.join(RoasterEntity.class);
+            roaster.on(criteriaBuilder.equal(roaster.get(RoasterEntity_.country), root.get(CoffeeEntity_.origin)));
+            return criteriaBuilder.isNotNull(roaster.get(RoasterEntity_.name));
+        };
     }
 
     @Test
@@ -127,6 +145,20 @@ class CoffeeCollectionJoinTest extends HibernateTest {
                 .as("Kaldi Roasting first, then Moka Brothers, each by name")
                 .containsExactly(SIDAMO, YIRGACHEFFE, BOURBON_POINTU, GEISHA);
         assertThat(result.totalItems()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("returns, counts and scrolls each entity once through an entity join, which lists no attribute")
+    void semiJoinsAnEntityJoin() {
+        // A second Ethiopian roaster, so that each Ethiopian coffee is joined to two roasters
+        persist(roaster("Addis Roasters", ETHIOPIA));
+
+        PaginationResult<CoffeeEntity> page = withQueries((queries, context) -> queries.search(context, null, roastedAtOrigin(), Pageable.of(0, 2)));
+        CursorResult<CoffeeEntity> scrolled = withQueries((queries, context) -> queries.scroll(context, null, roastedAtOrigin(), Cursor.first(2, Sort.NONE)));
+
+        assertThat(namesOf(page.items())).containsExactly(HARRAR, SIDAMO);
+        assertThat(page.totalItems()).isEqualTo(3);
+        assertThat(namesOf(scrolled.items())).containsExactly(HARRAR, SIDAMO);
     }
 
 }

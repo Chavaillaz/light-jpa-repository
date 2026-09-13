@@ -22,6 +22,9 @@ import java.util.function.Supplier;
 import org.hibernate.query.SelectionQuery;
 import org.hibernate.query.restriction.Restriction;
 import org.hibernate.query.specification.SelectionSpecification;
+import org.hibernate.query.sqm.tree.from.SqmAttributeJoin;
+import org.hibernate.query.sqm.tree.from.SqmFrom;
+import org.hibernate.query.sqm.tree.from.SqmJoin;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -131,16 +134,24 @@ public class EntityQueries<E> {
     }
 
     /**
-     * Checks if the given root joins a to-many association, directly or through another join, an entity being
-     * otherwise duplicated in the results as many times as it has matching children, which also breaks the
-     * pagination and the count.
+     * Checks if the given root joins what may match several rows per entity, directly or through another join: a
+     * to-many association, or a join following no association at all, such as an entity join. The entity is
+     * otherwise duplicated in the results once per matching row, which also breaks the pagination and the count.
      *
      * @param from The root or join to inspect
      * @return {@code true} if the joins may produce duplicated rows, {@code false} otherwise
      */
     protected static boolean hasCollectionJoin(From<?, ?> from) {
-        return from.getJoins().stream()
-                .anyMatch(join -> join.getAttribute().isCollection() || hasCollectionJoin(join));
+        // Read from the Hibernate query tree, since From#getJoins leaves out every join but the attribute ones
+        return ((SqmFrom<?, ?>) from).getSqmJoins().stream().anyMatch(EntityQueries::multipliesRows);
+    }
+
+    private static boolean multipliesRows(SqmJoin<?, ?> join) {
+        if (join instanceof SqmAttributeJoin<?, ?> attributeJoin) {
+            // A fetch filters nothing, and From#getJoins leaves it out as well
+            return !attributeJoin.isFetched() && (attributeJoin.getAttribute().isCollection() || hasCollectionJoin(attributeJoin));
+        }
+        return true;
     }
 
     /**
