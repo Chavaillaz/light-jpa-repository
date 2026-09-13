@@ -95,7 +95,7 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @see #findById(I)
      */
     default E getById(I id) {
-        return findById(id).orElseThrow(() -> new NoSuchElementException("No entity found with the identifier %s in %s".formatted(id, getClass().getSimpleName())));
+        return findById(id).orElseThrow(() -> new NoSuchElementException("No entity found with identifier %s in %s".formatted(id, getClass().getSimpleName())));
     }
 
     /**
@@ -130,7 +130,7 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @see #findById(Object, LockModeType)
      */
     default E getById(I id, LockModeType lockMode) {
-        return findById(id, lockMode).orElseThrow(() -> new NoSuchElementException("No entity found with the identifier %s in %s".formatted(id, getClass().getSimpleName())));
+        return findById(id, lockMode).orElseThrow(() -> new NoSuchElementException("No entity found with identifier %s in %s".formatted(id, getClass().getSimpleName())));
     }
 
     /**

@@ -117,7 +117,7 @@ class CoffeeRepositoryTest extends HibernateTest {
             assertThat(repository.findById(-1L)).isEmpty();
             assertThatExceptionOfType(NoSuchElementException.class)
                     .isThrownBy(() -> repository.getById(-1L))
-                    .withMessageContaining("No entity found with the identifier -1")
+                    .withMessageContaining("No entity found with identifier -1")
                     .withMessageContaining(CoffeeRepositoryJpa.class.getSimpleName());
         });
     }

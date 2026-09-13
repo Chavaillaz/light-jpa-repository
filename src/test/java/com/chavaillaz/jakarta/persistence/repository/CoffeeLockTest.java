@@ -85,7 +85,7 @@ class CoffeeLockTest extends HibernateTest {
         assertThat(found).isNotNull();
         assertThatExceptionOfType(NoSuchElementException.class)
                 .isThrownBy(() -> withRepository(repository -> repository.getById(-1L, PESSIMISTIC_WRITE)))
-                .withMessageContaining("No entity found with the identifier -1");
+                .withMessageContaining("No entity found with identifier -1");
     }
 
     @Test
