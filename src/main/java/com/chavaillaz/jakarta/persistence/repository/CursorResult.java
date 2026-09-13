@@ -9,7 +9,8 @@ import org.jspecify.annotations.Nullable;
  * Page of results returned by a cursor query, carrying the tokens to navigate to the surrounding pages.
  * <p>
  * No total number of items is exposed: computing it would require the very aggregation cursor pagination is
- * meant to avoid. When a total is genuinely needed, it stays available through {@code count(rsql)}.
+ * meant to avoid. When a total is genuinely needed, it stays available through {@link Repository#count()} and the
+ * {@code count(...)} overloads a repository writes its own queries with.
  *
  * @param <T>         The type of the returned items
  * @param items       The items of the current page

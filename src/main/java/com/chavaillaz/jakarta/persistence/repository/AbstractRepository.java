@@ -491,7 +491,8 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @param sort        The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @param pageSize    The number of items fetched per underlying page, capped to {@link Cursor#MAX_SIZE}
      * @return The lazy stream of every matching entity, in the requested ordering
-     * @throws IllegalArgumentException if the ordering is not usable as a cursor key
+     * @throws IllegalArgumentException if the ordering is not usable as a cursor key, raised when the stream is
+     *                                  first consumed and not when it is obtained, nothing being queried until then
      */
     protected Stream<E> stream(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort, int pageSize) {
         return Cursors.stream(cursor -> queries().scroll(context(), restriction, criteria, cursor), sort, pageSize);
@@ -708,8 +709,8 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * <p>
      * Override to restrict the reachable attributes and to decouple the public naming from the entity one, the
      * paths being preferably built from the static metamodel so that they are checked at compile time. When the
-     * returned map is empty, every attribute of the entity is reachable, both for sorting and for an RSQL filter
-     * expression.
+     * returned map is empty, every attribute of the entity is reachable, both for sorting and for a dynamic filter
+     * expression built on top, such as the RSQL support of the sibling {@code rsql-jpa-repository} artifact.
      *
      * @return The searchable properties, an empty map to allow every attribute
      */

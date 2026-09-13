@@ -208,7 +208,8 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @param sort     The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @param pageSize The number of items fetched per underlying page, capped to {@link Cursor#MAX_SIZE}
      * @return The lazy stream of every matching entity, in the requested ordering
-     * @throws IllegalArgumentException if the ordering is not usable as a cursor key
+     * @throws IllegalArgumentException if the ordering is not usable as a cursor key, raised when the stream is
+     *                                  first consumed and not when it is obtained, nothing being queried until then
      * @see #findAll(Cursor)
      */
     default Stream<E> streamAll(Sort sort, int pageSize) {
