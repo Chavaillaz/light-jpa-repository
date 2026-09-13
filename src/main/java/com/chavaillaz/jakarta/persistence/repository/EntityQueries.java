@@ -26,24 +26,21 @@ import org.hibernate.query.sqm.tree.from.SqmJoin;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Typed queries of an entity type, built from the Hibernate {@link Restriction restrictions}, which are checked at
- * compile time against the static metamodel, and from the additional {@link Criteria criteria}, which express what
- * the restrictions cannot, such as the correlated subqueries.
+ * Typed queries of an entity type, built from the Hibernate {@link Restriction restrictions}, checked at compile
+ * time against the static metamodel, and from the additional {@link Criteria criteria}, which express what the
+ * restrictions cannot, such as the correlated subqueries.
  * <p>
- * One instance is shared by every repository over the same entity: what belongs to the repository a query is
- * written for travels with the {@link RepositoryContext} handed over at each call.
- * <p>
- * The total number of matching items is always derived from the very same query as the results, so that the count
- * can never drift away from them, as it does when both are written as two separate queries.
+ * One instance is shared by every repository over the same entity, what belongs to a repository travelling with
+ * the {@link RepositoryContext} of each call. The total number of matching items is always derived from the very
+ * same query as the results, so that the two cannot drift apart.
  *
  * @param <E> The type of the managed entity
  */
 public class EntityQueries<E> {
 
     /**
-     * The query support, held per entity type rather than per repository, nothing of a repository being kept
-     * here. A {@link ClassValue} is used rather than a plain map keyed by the class, so that the cache cannot
-     * hold a class, and therefore its class loader, alive after a redeployment.
+     * The queries of each entity type, held in a {@link ClassValue} rather than in a map keyed by the class, so
+     * that the cache cannot keep a class loader alive after a redeployment.
      */
     private static final ClassValue<EntityQueries<?>> QUERIES = new ClassValue<>() {
 
@@ -78,12 +75,7 @@ public class EntityQueries<E> {
     }
 
     /**
-     * Gets the queries of the given entity type.
-     * <p>
-     * The instance is shared by every repository over that entity, which is possible precisely because it holds
-     * nothing of any of them: the entity manager, the ordering hooks and the cursor codecs travel with the
-     * {@link RepositoryContext} of each call. Nothing is therefore built per repository, and no entity manager,
-     * which is bound to a transaction, is ever captured.
+     * Gets the queries of the given entity type, shared by every repository over that entity.
      *
      * @param <E>        The type of the managed entity
      * @param entityType The type of the managed entity
@@ -91,14 +83,13 @@ public class EntityQueries<E> {
      */
     @SuppressWarnings("unchecked")
     public static <E> EntityQueries<E> of(Class<E> entityType) {
-        // A ClassValue erases the link between the key and the value it computes from it, so the cast cannot be
-        // proven by the compiler; it holds by construction, create building the queries of that very class
+        // A ClassValue loses the link between a class and the value computed from it, which holds by construction
         return (EntityQueries<E>) QUERIES.get(entityType);
     }
 
     /**
-     * Creates the queries of an entity type, the type parameter being captured so that the entity type and its
-     * ordering rules are known to be the very same one.
+     * Creates the queries of an entity type, its type parameter being captured so that the entity type and its
+     * ordering rules agree.
      *
      * @param <T>        The type of the managed entity
      * @param entityType The type of the managed entity
@@ -155,10 +146,6 @@ public class EntityQueries<E> {
     /**
      * Builds the selection query matching the given restriction and additional criteria, ordered by the requested
      * criteria or by the default ones.
-     * <p>
-     * The ordering is applied through an augmentation, so that it relies on the very same
-     * {@link EntityOrdering#buildOrders(RepositoryContext, jakarta.persistence.criteria.Root, Sort) criteria logic} as the other
-     * queries of the repository, the ordering rules being therefore defined only once.
      *
      * @param context     The repository the query is written for
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
@@ -172,15 +159,12 @@ public class EntityQueries<E> {
         boolean semiJoined = joinsCollection(context, restriction, criteria);
 
         return SelectionSpecification.create(entityType)
-                // A restriction joining a collection is moved into the semi join below, and must therefore not be
-                // applied to the root as well, which would join it a second time
+                // A restriction moved into the semi join must not join the root a second time
                 .restrict(restriction == null || semiJoined ? unrestricted() : restriction)
                 .augment((criteriaBuilder, query, root) -> {
                     if (semiJoined) {
                         restrict(criteriaBuilder, query, semiJoin(criteriaBuilder, query, root, restriction, criteria));
                     } else if (criteria != null) {
-                        // Appended through the null safe helper, the restriction of the query being absent when
-                        // the given one matches every entity
                         restrict(criteriaBuilder, query, criteria.toPredicate(criteriaBuilder, query, root));
                     }
                     query.orderBy(ordering.buildOrders(context, root, sort));
@@ -189,16 +173,16 @@ public class EntityQueries<E> {
     }
 
     /**
-     * Checks whether the given restriction and criteria join a to-many association, which duplicates the root
-     * entity as many times as it has matching children.
+     * Checks whether the given restriction and criteria join what may duplicate the root entity, see
+     * {@link #hasCollectionJoin(From)}.
      * <p>
-     * The predicates are built against a throwaway root, which is the only way to know what they join: they are
-     * opaque until they are applied. Nothing but criteria nodes is created, no query reaching the database.
+     * What they join is only known once they are applied, so they are applied to a throwaway root, which issues
+     * no query.
      *
      * @param context     The repository the query is written for
      * @param restriction The restriction to inspect, or {@code null}
      * @param criteria    The criteria to inspect, or {@code null}
-     * @return {@code true} if applying them to a root would join a collection, {@code false} otherwise
+     * @return {@code true} if applying them to a root would duplicate it, {@code false} otherwise
      */
     protected boolean joinsCollection(RepositoryContext<E> context, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria) {
         if (restriction == null && criteria == null) {
@@ -219,18 +203,11 @@ public class EntityQueries<E> {
     }
 
     /**
-     * Builds the predicate keeping the entities matching the given restriction and criteria as a semi join: the
-     * predicates are applied to a correlated subquery instead of to the root of the query itself.
+     * Builds the predicate keeping the entities matching the given restriction and criteria as a semi join: both
+     * are applied to a correlated {@code exists} subquery, which never duplicates the root entity.
      * <p>
-     * A collection join multiplies the root entity by its matching children, which used to be compensated by a
-     * {@code distinct}. That compensation is not portable: a {@code select distinct} may only be ordered by
-     * expressions of its own select list, so ordering on a joined attribute, which the pagination of this library
-     * does as soon as a nested property is sorted on, is rejected by PostgreSQL and Oracle, whereas H2 and MySQL
-     * accept it. It also forces the database to deduplicate a result set it had to multiply first.
-     * <p>
-     * An {@code exists} subquery has neither problem: the row is never duplicated in the first place, so no
-     * {@code distinct} is needed, the ordering is free to reach whatever it needs, and the count matches the
-     * results without any further care.
+     * A {@code distinct} would not be portable: a {@code select distinct} may only be ordered by expressions of its
+     * select list, which PostgreSQL and Oracle enforce as soon as the ordering reaches a joined attribute.
      *
      * @param criteriaBuilder The builder to use
      * @param query           The query being built, to create the subquery from
@@ -248,7 +225,7 @@ public class EntityQueries<E> {
         Subquery<Integer> matching = query.subquery(Integer.class);
         Root<E> matched = matching.from(entityType);
 
-        // Comparing the two roots as entities correlates the subquery on the identifier, whatever it is made of
+        // Comparing the two roots as entities correlates them on the identifier, whatever it is made of
         Predicate predicate = criteriaBuilder.equal(matched, root);
         if (restriction != null) {
             predicate = criteriaBuilder.and(predicate, restriction.toPredicate(matched, criteriaBuilder));
@@ -262,18 +239,14 @@ public class EntityQueries<E> {
 
     /**
      * Combines the given restriction and additional criteria into the predicate restricting a query, either one
-     * being possibly absent.
-     * <p>
-     * This is what every query but the paginated search is restricted with, so that a restriction and a criteria
-     * are combined the very same way whether the query counts, checks an existence, scrolls or deletes.
+     * being possibly absent, so that every query but the paginated search combines them the same way.
      *
      * @param criteriaBuilder The builder to use
      * @param query           The query being built, to create the subqueries of the criteria from
      * @param root            The root entity of the query
      * @param restriction     The restriction to apply, or {@code null}
      * @param criteria        The additional criteria to apply, or {@code null}
-     * @return The corresponding predicate, or {@code null} when neither is given, the query then matching every
-     * entity
+     * @return The corresponding predicate, or {@code null} when neither is given
      */
     protected @Nullable Predicate toPredicate(
             CriteriaBuilder criteriaBuilder,
@@ -308,12 +281,10 @@ public class EntityQueries<E> {
         SelectionQuery<E> query = createQuery(context, restriction, criteria, pageable.sort());
 
         if (pageable.isPaginated()) {
-            // The count is intentionally computed from the same query, before the pagination is applied
+            // Counted from the same query, before the pagination is applied
             long totalItems = query.getResultCount();
 
-            // A page number far beyond the end overflows the int offset the JDBC drivers take, which the
-            // providers reject as a negative first result; such a page is empty anyway, so it is returned as is
-            // rather than surfaced as a server error on what is a plain query parameter
+            // An offset overflowing an int is rejected by the providers, and such a page is empty anyway
             if (Pageables.overflows(pageable)) {
                 return PaginationResult.of(List.of(), pageable.page(), pageable.size(), totalItems);
             }
@@ -328,12 +299,9 @@ public class EntityQueries<E> {
      * Searches for the entities of a related type matching the given restriction, for the repositories exposing
      * the entities gravitating around the managed one, such as the children of an association.
      * <p>
-     * The results are ordered by the identifier of the <em>related</em> entity, and not by the ordering rules of
-     * the repository, which are those of the entity it manages and say nothing about another type. That is the
-     * one ordering the metamodel alone provides, and it is enough for the results to come back in a stable order
-     * rather than in whatever order the database happened to produce, which is what every other query of this
-     * library guarantees. Order a related search on business attributes by writing it as a query of the
-     * repository managing that type.
+     * The results are ordered by the identifier of the related type, the ordering rules of the repository only
+     * describing the entity it manages. Order them on business attributes by writing the query in the repository
+     * managing the related type.
      *
      * @param context     The repository the query is written for
      * @param <R>         The type of the related entity
@@ -371,8 +339,8 @@ public class EntityQueries<E> {
     /**
      * Checks whether at least one entity matches the given restriction and additional criteria.
      * <p>
-     * Unlike {@link #count(RepositoryContext, Restriction, Criteria)}, the database stops at the first matching row and no entity is
-     * hydrated: only a literal is selected, so nothing is added to the persistence context either.
+     * Unlike {@link #count(RepositoryContext, Restriction, Criteria)}, the database stops at the first matching row,
+     * and only a literal is selected, so no entity is hydrated.
      *
      * @param context     The repository the query is written for
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
@@ -391,23 +359,17 @@ public class EntityQueries<E> {
             query.where(predicate);
         }
 
-        // No ordering is applied, the question being whether a row exists and not which one comes first, and a
-        // plain list is used rather than getSingleResult(), which would throw when nothing matches
+        // Left unordered, and listed since getSingleResult() throws when nothing matches
         return !context.entityManager().createQuery(query).setMaxResults(1).getResultList().isEmpty();
     }
 
     /**
      * Deletes every entity matching the given restriction and additional criteria, in a single statement.
      * <p>
-     * This is a bulk deletion, which the database performs on its own: it does not cascade to the associations,
-     * does not honour {@code orphanRemoval}, does not run the {@code @PreRemove} callbacks and leaves the already
-     * loaded entities in the persistence context, which therefore holds rows that no longer exist. Prefer
-     * deleting the entities one by one when any of that matters, and refresh or clear the persistence context
-     * afterwards when it does not.
-     * <p>
-     * A restriction joining an association cannot be expressed by a bulk deletion, which has no {@code from}
-     * clause to join: restrict on the attributes of the entity itself, or select the entities to delete with
-     * {@link Criteria#exists(Class, String, java.util.function.BiFunction)}, which is a subquery.
+     * This is a bulk deletion: it does not cascade, does not honour {@code orphanRemoval}, does not run the
+     * {@code @PreRemove} callbacks and leaves the already loaded entities in the persistence context. It cannot
+     * join an association either, so restrict on the attributes of the entity itself, or use a subquery such as
+     * {@link Criteria#exists(Class, String, java.util.function.BiFunction)}.
      *
      * @param context     The repository the query is written for
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to delete
@@ -431,8 +393,6 @@ public class EntityQueries<E> {
     /**
      * Gets the first entity matching the given restriction and additional criteria, following the requested
      * ordering.
-     * <p>
-     * Only the first row is fetched, the ordering making it deterministic.
      *
      * @param context     The repository the query is written for
      * @param restriction The restriction to apply, or {@code null}
@@ -450,14 +410,10 @@ public class EntityQueries<E> {
      * Gets the first entity matching the given restriction and additional criteria, following the requested
      * ordering, holding the requested lock on its row.
      * <p>
-     * This is what claiming the next row to process is written with: the ordering makes the choice
-     * deterministic, and the lock is taken as the row is read, so that a concurrent transaction ordering on the
-     * very same criteria does not claim it as well.
-     * <p>
-     * Order the claim on attributes of the entity itself when a lock is taken: an ordering on a nested property
-     * navigates its association with a left join, and PostgreSQL, among others, refuses to lock the nullable side
-     * of an outer join. Sorting the candidates in the database and locking them by their own columns is portable,
-     * ordering on a joined column and locking in the same statement is not.
+     * This is how the next row to process is claimed: the ordering makes the choice deterministic, and the lock
+     * keeps a concurrent transaction from claiming the same row. Order such a claim on attributes of the entity
+     * itself, since a nested property is navigated with a left join, and PostgreSQL, among others, refuses to lock
+     * the nullable side of an outer join.
      *
      * @param context     The repository the query is written for
      * @param restriction The restriction to apply, or {@code null}
@@ -469,7 +425,7 @@ public class EntityQueries<E> {
      * @throws IllegalArgumentException if the ordering refers to an unknown property or to a collection
      */
     public Optional<E> first(RepositoryContext<E> context, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Sort sort, LockModeType lockMode) {
-        // A plain list is used rather than getResultStream(), which the caller would have to close explicitly
+        // Listed rather than streamed, a result stream having to be closed by the caller
         return createQuery(context, restriction, criteria, sort)
                 .setLockMode(lockMode)
                 .setMaxResults(1)
@@ -493,8 +449,7 @@ public class EntityQueries<E> {
     public CursorResult<E> scroll(RepositoryContext<E> context, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Cursor cursor) {
         Sort resolvedSort = ordering.resolveSort(context, cursor.sort());
 
-        // A nullable key is refused here rather than when a token is built on it, which only catches the rows the
-        // database happens to sort onto the first page, see EntityOrdering#requireSeekable
+        // Refused before a single row is read, see EntityOrdering#requireSeekable
         resolvedSort.criteria().forEach(criterion -> ordering.requireSeekable(context, criterion.property()));
 
         CursorPosition position = Cursors.position(context.cursorCodec(), cursor, resolvedSort);
@@ -504,8 +459,7 @@ public class EntityQueries<E> {
         CriteriaQuery<Tuple> query = criteriaBuilder.createTupleQuery();
         Root<E> root = query.from(entityType);
 
-        // A restriction or a criteria joining a collection is moved into a semi join, which keeps the boundary row
-        // from being duplicated and therefore the page from being silently shortened
+        // Semi joined when needed, a duplicated boundary row silently shortening the page
         Predicate predicate = joinsCollection(context, restriction, criteria)
                 ? semiJoin(criteriaBuilder, query, root, restriction, criteria)
                 : toPredicate(criteriaBuilder, query, root, restriction, criteria);

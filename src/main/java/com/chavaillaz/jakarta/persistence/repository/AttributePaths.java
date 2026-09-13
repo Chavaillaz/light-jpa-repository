@@ -23,23 +23,20 @@ import org.jspecify.annotations.Nullable;
  * Navigation of a dotted entity attribute path, such as {@code roaster.name}, either through the criteria API of
  * a query or reflectively on an entity instance.
  * <p>
- * This is shared by everything naming an attribute by its path: the ordering of any query resolves one here, and
- * so do the {@link Keysets keyset} clauses of the cursor pagination. Both must walk a nested path exactly the same
- * way, which is why the walk lives in one place rather than in each of them.
+ * Every ordering resolves its attributes here, that of an offset query as the {@link Keysets keyset} clauses of a
+ * cursor one, so that a nested path is walked the same way whichever pagination asks for it.
  */
 public final class AttributePaths {
 
     /**
-     * Compiled form of the {@link SortCriterion#NESTING_SEPARATOR}, quoted so that a separator holding a regex
-     * metacharacter — which the dot is — splits literally, and compiled once since every query resolves one path
-     * per ordering key.
+     * Compiled form of the {@link SortCriterion#NESTING_SEPARATOR}, quoted since the dot is a regex metacharacter.
      */
     private static final Pattern NESTING_PATTERN = Pattern.compile(Pattern.quote(SortCriterion.NESTING_SEPARATOR));
 
     /**
-     * Accessors of the entity attributes, resolved once per entity class and attribute rather than at every
-     * boundary row of every page. A {@link ClassValue} is used rather than a plain map keyed by the class, so that
-     * the cache cannot hold a class, and therefore its class loader, alive after a redeployment.
+     * Accessors of the entity attributes, resolved once per class and attribute, held in a {@link ClassValue}
+     * rather than in a map keyed by the class, so that the cache cannot keep a class loader alive after a
+     * redeployment.
      */
     private static final ClassValue<Map<String, AccessibleObject>> ACCESSORS = new ClassValue<>() {
 
@@ -58,10 +55,8 @@ public final class AttributePaths {
      * Resolves the path of an already validated entity attribute path, a nested one being expressed with the
      * {@link SortCriterion#NESTING_SEPARATOR}.
      * <p>
-     * The type of the resolved attribute is inferred from the call site, as {@link Path#get(String)} itself does:
-     * it cannot be checked at compile time since the path is only known as a string, and it is guaranteed instead
-     * by {@link EntityOrdering}, which validates every ordering property against the metamodel before a query is
-     * built.
+     * The type of the attribute is inferred from the call site, as {@link Path#get(String)} infers it, the path
+     * being only known as a string; {@link EntityOrdering} validates it against the metamodel beforehand.
      *
      * @param <Y>      The type of the resolved attribute, inferred from the call site
      * @param from     The root or join to resolve the path against
@@ -80,23 +75,14 @@ public final class AttributePaths {
     }
 
     /**
-     * Resolves a single attribute of a nested path, navigating an intermediate association with a reused left
-     * join rather than with the implicit inner join {@link Path#get(String)} produces.
+     * Resolves a single attribute of a nested path, navigating an intermediate association with a left join
+     * rather than with the implicit inner join {@link Path#get(String)} produces.
      * <p>
-     * An inner join silently drops the entities whose association is {@code null}, which is wrong for an
-     * ordering: the row disappears from the results while it still is counted by the very same query, the count
-     * being derived without the {@code order by} clause. A left join keeps it, the database then placing its
-     * {@code null} key first or last depending on its own null ordering.
-     * <p>
-     * An intermediate embeddable is joined as well, although its attributes live in the very same row and its
-     * join therefore costs no join at all in the emitted SQL. Only a {@link From} can be left joined, and
-     * {@link Path#get(String)} on an embeddable yields a plain path: an association reached through one, such as
-     * {@code shipment.carrier.name}, would otherwise be the implicit inner join this method exists to avoid, and
-     * would drop the rows whose carrier is not set while still counting them.
-     * <p>
-     * The joins the query already has are reused rather than created anew for each key, so that ordering on two
-     * attributes of the same association, ordering and seeking on the same one, or ordering on the association a
-     * restriction or a criteria already joins, does not join it twice; see {@link #reusedJoin(From, String)}.
+     * An inner join drops the entities whose association is {@code null} from the results, while the count,
+     * derived from the same query without its {@code order by} clause, still includes them. An intermediate
+     * embeddable is joined as well, which costs no join in the emitted SQL, since only a {@link From} can be left
+     * joined to reach an association behind it. A join the query already has is reused, see
+     * {@link #reusedJoin(From, String)}.
      *
      * @param parent       The path to resolve the attribute against
      * @param attribute    The name of the attribute to resolve
@@ -104,14 +90,12 @@ public final class AttributePaths {
      *                     navigated rather than read
      * @return The corresponding path, a join for an intermediate association or embeddable
      * @throws IllegalArgumentException if the attribute does not exist on the parent path
-     * @throws IllegalStateException    if the parent path is a basic attribute, which has nothing to dereference,
-     *                                  both being what the contract of {@link Path#get(String)} raises
+     * @throws IllegalStateException    if the parent path is a basic attribute, which has nothing to dereference
      */
     static Path<?> step(Path<?> parent, String attribute, boolean intermediate) {
         Path<?> path = parent.get(attribute);
 
-        // A plural attribute is deliberately left untouched, so that the callers reject it as they always did:
-        // joining a collection duplicates the rows, which no ordering nor seek predicate can recover from
+        // A plural attribute is left on its path for the callers to reject, a join on it duplicating the rows
         if (intermediate
                 && parent instanceof From<?, ?> owner
                 && path.getModel() instanceof SingularAttribute<?, ?> singular
@@ -122,8 +106,7 @@ public final class AttributePaths {
     }
 
     /**
-     * Splits an entity attribute path into its attributes, shared by the path resolution and by the read back of
-     * the attribute values so that both walk a nested path exactly the same way.
+     * Splits an entity attribute path into its attributes.
      *
      * @param property The entity attribute path to split
      * @return The attributes it is made of, in order
@@ -154,12 +137,8 @@ public final class AttributePaths {
 
     /**
      * Navigates an association through the join the query already has on it, creating a left one only when it has
-     * none.
-     * <p>
-     * Whatever its type, an existing join is the one to walk: it is already part of the query, so the rows it
-     * keeps are already the rows the query returns, and adding a left join next to an inner one cannot bring back
-     * the entities the latter has dropped. It would only make the database join the same table twice, to order on
-     * a column the first join already reaches.
+     * none: whatever its type, the existing join already decides which rows the query returns, and a second one
+     * would only join the same table twice.
      *
      * @param owner     The root or join owning the association
      * @param attribute The name of the association to navigate
@@ -184,10 +163,7 @@ public final class AttributePaths {
 
     /**
      * Resolves the accessor of an attribute, the getter taking precedence over the field so that a computed or
-     * decorated one is honoured, walking the hierarchy up so that an inherited mapped superclass is covered.
-     * <p>
-     * The resolution is cached per entity class, since a cursor query reads the keys of both boundary rows of
-     * every page it walks, and {@code getDeclaredMethod} copies the whole method array of the class at each call.
+     * decorated one is honoured, walking up the hierarchy so that a mapped superclass is covered.
      *
      * @param type      The type to resolve the accessor on
      * @param attribute The name of the attribute to read
@@ -219,8 +195,7 @@ public final class AttributePaths {
             accessor.setAccessible(true);
             return accessor;
         } catch (InaccessibleObjectException | SecurityException e) {
-            // Both are unchecked and thrown by setAccessible itself, not by the reflective call, so neither
-            // extends ReflectiveOperationException
+            // Thrown by setAccessible itself, neither of them being a ReflectiveOperationException
             throw new IllegalStateException("Cannot read the attribute " + attribute, e);
         }
     }

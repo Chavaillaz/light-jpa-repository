@@ -100,14 +100,12 @@ public interface Criteria<T> {
     /**
      * Builds the predicate to add to the query.
      * <p>
-     * The query is only taken as the {@link CommonAbstractCriteria} the subqueries are created from, and not as
-     * the typed {@link jakarta.persistence.criteria.CriteriaQuery} being selected, so that the very same criteria can restrict a selection, a
-     * count, an existence check and a bulk deletion, whose result types all differ.
+     * The query is taken as the {@link CommonAbstractCriteria} the subqueries are created from, so that the same
+     * criteria can restrict a selection, a count, an existence check and a bulk deletion alike.
      * <p>
-     * This is called more than once for a single query: what a criteria joins is only knowable by applying it, so
-     * a paginated search first builds it against a throwaway root to decide whether it needs a semi join, then
-     * builds it again against the root of the query itself. An implementation must therefore be a pure function
-     * of its arguments, deriving the predicate from the root it is handed and holding no state across calls.
+     * This is called more than once per query, what a criteria joins only being known once it is applied, first to
+     * a throwaway root: an implementation must be a pure function of its arguments, deriving the predicate from the
+     * root it is given and holding no state across calls.
      *
      * @param criteriaBuilder The builder to use to create the predicate
      * @param query           The query being built, to create the subqueries from

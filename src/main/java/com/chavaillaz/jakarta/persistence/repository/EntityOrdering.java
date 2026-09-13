@@ -30,18 +30,16 @@ import org.jspecify.annotations.Nullable;
  * Ordering rules of an entity type, resolving the properties exposed by the API into entity attributes and
  * building the ordering of the queries; see {@link Sort} for why the identifier of the entity is always appended.
  * <p>
- * The default ordering and the searchable properties are provided by the repository the query is written for,
- * through the {@link RepositoryContext} of each call, so that they stay overridable by its subclasses and that
- * one instance can be shared by every repository over the same entity.
+ * The default ordering and the searchable properties come from the {@link RepositoryContext} of each call, so that
+ * they stay overridable by the repositories and one instance can be shared by every repository over the entity.
  *
  * @param <E> The type of the managed entity
  */
 public class EntityOrdering<E> {
 
     /**
-     * The ordering rules, held per entity type rather than per repository, nothing of a repository being kept
-     * here. A {@link ClassValue} is used rather than a plain map keyed by the class, so that the cache cannot
-     * hold a class, and therefore its class loader, alive after a redeployment.
+     * The ordering rules of each entity type, held in a {@link ClassValue} rather than in a map keyed by the
+     * class, so that the cache cannot keep a class loader alive after a redeployment.
      */
     private static final ClassValue<EntityOrdering<?>> ORDERINGS = new ClassValue<>() {
 
@@ -69,12 +67,7 @@ public class EntityOrdering<E> {
     }
 
     /**
-     * Gets the ordering rules of the given entity type.
-     * <p>
-     * The instance is shared by every repository over that entity, which is possible precisely because it holds
-     * nothing of any of them: the entity manager and the hooks travel with the {@link RepositoryContext} of each
-     * call, so two repositories declaring different searchable properties over the same entity still each get
-     * their own rules applied.
+     * Gets the ordering rules of the given entity type, shared by every repository over that entity.
      *
      * @param <E>        The type of the managed entity
      * @param entityType The type of the managed entity
@@ -82,8 +75,7 @@ public class EntityOrdering<E> {
      */
     @SuppressWarnings("unchecked")
     public static <E> EntityOrdering<E> of(Class<E> entityType) {
-        // A ClassValue erases the link between the key and the value it computes from it, so the cast cannot be
-        // proven by the compiler; it holds by construction, computeValue building the rules of that very class
+        // A ClassValue loses the link between a class and the value computed from it, which holds by construction
         return (EntityOrdering<E>) ORDERINGS.get(entityType);
     }
 
@@ -92,10 +84,9 @@ public class EntityOrdering<E> {
      *
      * @param expression The expression to name
      * @return The corresponding property path
-     * @throws IllegalArgumentException if the expression is not a plain attribute path, a computed ordering such
-     *                                  as {@code lower(name)} being unusable as a cursor key since its value
-     *                                  cannot be read back from the returned entity, or if it names no attribute
-     *                                  at all, being the root entity itself
+     * @throws IllegalArgumentException if the expression is not a plain attribute path, such as a computed
+     *                                  {@code lower(name)}, or if it names no attribute, being the root entity
+     *                                  itself
      */
     public static String nameOf(Expression<?> expression) {
         Deque<String> names = new ArrayDeque<>();
@@ -106,8 +97,7 @@ public class EntityOrdering<E> {
             names.addFirst(attribute.getName());
         }
         if (names.isEmpty()) {
-            // The expression is the root itself, which has no parent path to walk up and therefore names nothing;
-            // returning the empty path would surface much later, as an invalid sort property with no name in it
+            // The root has no parent path, and would otherwise surface later as a sort property with no name
             throw new IllegalArgumentException("Cannot order on the entity " + expression + " itself, an attribute is required");
         }
         return String.join(SortCriterion.NESTING_SEPARATOR, names);
@@ -122,9 +112,8 @@ public class EntityOrdering<E> {
 
     /**
      * Applies the ordering to the given query, the requested criteria taking precedence over the default ones and
-     * the identifier being appended so that the ordering is unique, whatever the pagination. Nothing is applied
-     * when no ordering is requested and the query already carries one, so that an ordering a custom RSQL visitor
-     * already built on the query is not silently overridden.
+     * the identifier being appended so that the ordering is unique. Nothing is applied when no ordering is
+     * requested and the query already carries one, such as one an RSQL visitor built.
      *
      * @param context  The repository the query is written for
      * @param query    The search query to order
@@ -143,14 +132,11 @@ public class EntityOrdering<E> {
 
     /**
      * Builds the ordering of a query, made of the requested criteria, or of the default ones when none is
-     * requested, followed by the identifier of the entity so that the resulting ordering is always unique and thus
-     * stable.
+     * requested, followed by the identifier of the entity so that the ordering is unique and thus stable.
      * <p>
-     * An expression is only compared once, the first criterion reaching it winning, exactly as
-     * {@link #resolveSort(RepositoryContext, Sort)} keeps a property once: a second comparison cannot discriminate
-     * two rows the first one already left equal. The ordering comes from the API consumers, so without it a
-     * {@code sort=name,name,name,...} grows the {@code ORDER BY} clause of every query as far as the consumer
-     * cares to repeat itself, and two public properties aliasing the same attribute silently compare it twice.
+     * An expression is compared once, the first criterion reaching it winning: a second comparison cannot
+     * discriminate two rows the first one left equal, and an API consumer repeating a property would otherwise
+     * grow the {@code ORDER BY} clause at will.
      *
      * @param context The repository the query is written for
      * @param root    The root entity of the query
@@ -161,8 +147,7 @@ public class EntityOrdering<E> {
     public List<Order> buildOrders(RepositoryContext<E> context, Root<E> root, @Nullable Sort sort) {
         CriteriaBuilder criteriaBuilder = context.entityManager().getCriteriaBuilder();
 
-        // Keyed by the expression the criterion resolves to, so that the first one comparing it wins and the
-        // insertion order, which is the order of precedence, is preserved
+        // Keyed by the compared expression, in the order of precedence
         Map<Expression<?>, Order> orders = new LinkedHashMap<>();
         if (sort == null || sort.isEmpty()) {
             context.defaultOrders(criteriaBuilder, root).forEach(order -> keep(orders, order));
@@ -170,8 +155,7 @@ public class EntityOrdering<E> {
             sort.criteria().forEach(criterion -> keep(orders, toOrder(context, criteriaBuilder, root, criterion)));
         }
 
-        // The identifier is only appended when it is not already part of the ordering, so that a repository
-        // ordering on it explicitly, in descending order for instance, is not overridden
+        // Appended unless already part of the ordering, so that the direction asked for it stands
         getIdPaths(context, root)
                 .map(criteriaBuilder::asc)
                 .forEach(order -> keep(orders, order));
@@ -204,20 +188,13 @@ public class EntityOrdering<E> {
     }
 
     /**
-     * Resolves a property exposed by the API into the path of the corresponding entity attribute, be it for
-     * sorting or for a dynamic filter expression built on top of this class, such as the RSQL support of the
-     * sibling {@code rsql-jpa-repository} artifact.
+     * Resolves a property exposed by the API into the path of the corresponding entity attribute, for sorting as
+     * for a dynamic filter built on top, such as the RSQL support of the sibling {@code rsql-jpa-repository}.
      * <p>
-     * When the repository declares searchable properties, only those are accepted, which both restricts the
-     * attributes the API consumers can sort or filter on and decouples the public naming from the entity one.
-     * Otherwise, any attribute of the entity is accepted, the path being validated against the metamodel by the
-     * caller.
-     * <p>
-     * An entity attribute path already resolved, such as one built by {@link SortCriterion#asc(Attribute[])} from
-     * the static metamodel, is accepted as is under whatever public alias a searchable property declares it: it is
-     * compile time safe by construction rather than API consumer supplied, and it reaches an attribute a declared
-     * property already exposes, so accepting it widens no restriction. An attribute no property declares stays
-     * refused, the metamodel proving that it exists on the entity and not that the repository exposes it.
+     * When the repository declares searchable properties, only those are accepted, along with the attribute paths
+     * they target, such as one built from the static metamodel by {@link SortCriterion#asc(Attribute[])}: such a
+     * path is reachable through its property anyway, so accepting it widens no restriction. Otherwise, any
+     * attribute is accepted, the caller validating it against the metamodel.
      *
      * @param context  The repository the query is written for
      * @param property The property to resolve
@@ -240,11 +217,8 @@ public class EntityOrdering<E> {
 
     /**
      * Resolves the path to the given property of the managed entity, a nested property being expressed with
-     * {@link SortCriterion#NESTING_SEPARATOR}.
-     * <p>
-     * The property is first {@link #resolveProperty(RepositoryContext, String) resolved} against the searchable
-     * properties of the repository, then validated against the metamodel, as it usually comes from the API
-     * consumers.
+     * {@link SortCriterion#NESTING_SEPARATOR}, once {@link #resolveProperty(RepositoryContext, String) resolved}
+     * against the searchable properties and validated against the metamodel.
      *
      * @param context  The repository the query is written for
      * @param root     The root entity of the query
@@ -258,14 +232,11 @@ public class EntityOrdering<E> {
         Path<?> path = root;
         for (int index = 0; index < attributes.length; index++) {
             try {
-                // A nested property navigates its association with a left join, so that an entity whose
-                // association is null keeps being returned and counted, see AttributePaths#step
+                // A nested association is navigated with a left join, see AttributePaths#step
                 path = AttributePaths.step(path, attributes[index], index < attributes.length - 1);
             } catch (IllegalArgumentException | IllegalStateException e) {
-                // Both are caught because that is what the contract of Path#get raises: an unknown attribute is an
-                // IllegalArgumentException, while dereferencing one that is already terminal, which a property such
-                // as name.length is, is an IllegalStateException. The property comes from the API consumers, so the
-                // second one must not escape as the runtime failure it would otherwise be
+                // What Path#get raises for an unknown attribute, and for one reached through a basic attribute, such
+                // as name.length, both of which an API consumer is free to send
                 throw new IllegalArgumentException("Cannot sort on the unknown property " + property, e);
             }
             if (path.getModel() instanceof PluralAttribute) {
@@ -280,14 +251,9 @@ public class EntityOrdering<E> {
      * Resolves the complete ordering of a query into entity attribute paths: the requested criteria, or the
      * default ones when none is requested, followed by the identifier so that the ordering is unique.
      * <p>
-     * The returned ordering is what both the {@code ORDER BY} clause and the seek predicate are built from, so that
-     * they can never drift apart and silently return wrong pages. The criteria are expressed as entity attribute
-     * paths, already validated by {@link #resolvePath(RepositoryContext, Root, String)}.
-     * <p>
-     * A property is only kept once, the first occurrence winning as the database itself does: a second comparison
-     * on a property cannot discriminate two rows the first one already left equal, and each redundant key would
-     * still be selected, sought on and carried within every cursor token. Two public properties aliasing the very
-     * same attribute therefore collapse into one, whichever names them.
+     * Both the {@code ORDER BY} clause and the seek predicate of a cursor query are built from it, so that they
+     * cannot drift apart. A property is kept once, the first occurrence winning, as
+     * {@link #buildOrders(RepositoryContext, Root, Sort)} keeps an expression.
      *
      * @param context The repository the query is written for
      * @param sort    The requested ordering, {@link Sort#NONE} or {@code null} to apply the default ordering of
@@ -298,11 +264,10 @@ public class EntityOrdering<E> {
      */
     public Sort resolveSort(RepositoryContext<E> context, @Nullable Sort sort) {
         CriteriaBuilder criteriaBuilder = context.entityManager().getCriteriaBuilder();
-        // A throwaway root is enough: only the resolved names and directions are kept
+        // Only the resolved names and directions are kept, so a throwaway root is enough
         Root<E> root = criteriaBuilder.createQuery(entityType).from(entityType);
 
-        // Keyed by the resolved attribute path, so that the first criterion naming it wins and the insertion
-        // order, which is the order of precedence, is preserved
+        // Keyed by the resolved attribute path, in the order of precedence
         Map<String, SortCriterion> criteria = new LinkedHashMap<>();
         if (sort == null || sort.isEmpty()) {
             for (Order order : context.defaultOrders(criteriaBuilder, root)) {
@@ -314,8 +279,7 @@ public class EntityOrdering<E> {
             }
         }
 
-        // The identifier is appended so that the ordering is unique, unless it already is part of it, in which
-        // case the direction the repository or the consumer asked for is the one that stands
+        // Appended unless already part of the ordering, so that the direction asked for it stands
         getIdPaths(context, root)
                 .map(EntityOrdering::nameOf)
                 .map(SortCriterion::asc)
@@ -334,28 +298,16 @@ public class EntityOrdering<E> {
     }
 
     /**
-     * Checks that a property can be sought on, which a nullable one cannot: a seek predicate compares the key of
-     * a row against the key of the boundary one, and a comparison against {@code null} is never true, so no row
-     * whose key is {@code null} is ever returned once a page has been left behind.
+     * Checks that a property can be sought on, which a nullable one cannot: a comparison against {@code null} is
+     * never true, so no row whose key is {@code null} is returned once a page has been left behind.
      * <p>
-     * Whether that shows is left to the database, which is why it is caught here rather than when a token is
-     * built. A {@code null} key sorting first, as H2 and MySQL place it in an ascending order, lands on the first
-     * page, and the token issued for it is {@link CursorValues#format rejected} as soon as the consumer asks for
-     * the next one. A {@code null} key sorting last, which is what PostgreSQL and Oracle do in that very same
-     * ascending order, and what every one of them does in a descending one, is instead never reached: the walk
-     * ends on the last non null key, reporting no following page, and every row behind it is silently dropped.
-     * The same ordering therefore fails loudly on one database and truncates the results on another, so the
-     * attribute is refused on all of them, before a single row is read.
+     * How that shows depends on where the database sorts the nulls: sorted first, the first page lands on such a
+     * row and the token issued for it is refused; sorted last, the walk silently ends before them. The attribute
+     * is therefore refused before a single row is read, as nullable as the mapping declares it, and so is each
+     * attribute of a nested path, an optional association leaving the key {@code null} as an optional column
+     * does. An embeddable is skipped in favour of its components, being no key of its own.
      * <p>
-     * The nullability is the one the mapping declares, an attribute being optional unless a
-     * {@code @Column(nullable = false)} or an {@code optional = false} says otherwise. Each attribute of a nested
-     * path is checked, an optional association making the key of the entities having none {@code null} just as an
-     * optional column does. An embeddable is skipped, being no key of its own: its nullability lives in the
-     * components the rest of the path walks through, which are checked as any other attribute is.
-     * <p>
-     * Only the cursor queries check this; the offset ones order on a nullable attribute perfectly well, the
-     * database placing its {@code null} keys wherever it does and the count being derived from that very same
-     * query.
+     * Only the cursor queries check this, an offset query ordering on a nullable attribute perfectly well.
      *
      * @param context  The repository the query is written for
      * @param property The resolved entity attribute path to check
@@ -390,14 +342,9 @@ public class EntityOrdering<E> {
     }
 
     /**
-     * Gets the paths to the attributes composing the identifier of the managed entity, taking the entity manager
-     * on its own rather than the whole context of a repository.
-     * <p>
-     * The identifier is the one part of an ordering a repository has no say over: no hook of it is read here,
-     * only the metamodel. This is therefore what the queries over a type no repository is written for are ordered
-     * with, such as the
-     * {@link EntityQueries#search(RepositoryContext, Class, org.hibernate.query.restriction.Restriction) related entity search},
-     * whose rows would otherwise come back in whatever order the database happened to produce.
+     * Gets the paths to the attributes composing the identifier of the managed entity, reading nothing but the
+     * metamodel, for the queries over a type no repository is written for, such as the
+     * {@link EntityQueries#search(RepositoryContext, Class, org.hibernate.query.restriction.Restriction) related entity search}.
      *
      * @param entityManager The entity manager holding the metamodel the identifier is read from
      * @param root          The root entity of the query
@@ -413,9 +360,8 @@ public class EntityOrdering<E> {
 
         SingularAttribute<? super E, ?> idAttribute = entityMetamodel.getId(entityMetamodel.getIdType().getJavaType());
 
-        // Embedded identifier, ordered on each of its components, navigated through the very same step a requested
-        // ordering on one of them navigates it with, so that both resolve to the same paths and the identifier is
-        // appended once rather than twice, in a direction the repository may not have asked for
+        // Embedded identifier, navigated with the step a requested ordering on one of its components takes, so that
+        // both resolve to the same paths and the identifier is not appended a second time
         if (idAttribute.getType() instanceof EmbeddableType<?> embeddable) {
             Path<?> idPath = AttributePaths.step(root, idAttribute.getName(), true);
             return sortedByName(embeddable.getSingularAttributes()).map(attribute -> idPath.get(attribute.getName()));
