@@ -11,8 +11,10 @@ import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.EmbeddableType;
 import jakarta.persistence.metamodel.EntityType;
+import jakarta.persistence.metamodel.ManagedType;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
+import jakarta.persistence.metamodel.Type;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.LinkedHashMap;
@@ -324,6 +326,50 @@ public class EntityOrdering<E> {
      */
     private static void keep(Map<String, SortCriterion> criteria, SortCriterion criterion) {
         criteria.putIfAbsent(criterion.property(), criterion);
+    }
+
+    /**
+     * Checks that a property can be sought on, which a nullable one cannot: a seek predicate compares the key of
+     * a row against the key of the boundary one, and a comparison against {@code null} is never true, so no row
+     * whose key is {@code null} is ever returned once a page has been left behind.
+     * <p>
+     * Whether that shows is left to the database, which is why it is caught here rather than when a token is
+     * built. A {@code null} key sorting first, as H2 and MySQL place it in an ascending order, lands on the first
+     * page, and the token issued for it is {@link CursorValues#format rejected} as soon as the consumer asks for
+     * the next one. A {@code null} key sorting last, which is what PostgreSQL and Oracle do in that very same
+     * ascending order, and what every one of them does in a descending one, is instead never reached: the walk
+     * ends on the last non null key, reporting no following page, and every row behind it is silently dropped.
+     * The same ordering therefore fails loudly on one database and truncates the results on another, so the
+     * attribute is refused on all of them, before a single row is read.
+     * <p>
+     * The nullability is the one the mapping declares, an attribute being optional unless a
+     * {@code @Column(nullable = false)} or an {@code optional = false} says otherwise. Each attribute of a nested
+     * path is checked, an optional association making the key of the entities having none {@code null} just as an
+     * optional column does. An embeddable is skipped, being no key of its own: its nullability lives in the
+     * components the rest of the path walks through, which are checked as any other attribute is.
+     * <p>
+     * Only the cursor queries check this; the offset ones order on a nullable attribute perfectly well, the
+     * database placing its {@code null} keys wherever it does and the count being derived from that very same
+     * query.
+     *
+     * @param context  The repository the query is written for
+     * @param property The resolved entity attribute path to check
+     * @throws IllegalArgumentException if any attribute of the path is nullable
+     */
+    protected void requireSeekable(RepositoryContext<E> context, String property) {
+        ManagedType<?> owner = context.entityManager().getMetamodel().entity(entityType);
+
+        for (String attribute : AttributePaths.split(property)) {
+            SingularAttribute<?, ?> singular = owner.getSingularAttribute(attribute);
+            Type<?> type = singular.getType();
+
+            if (!(type instanceof EmbeddableType<?>) && singular.isOptional()) {
+                throw new IllegalArgumentException("Cannot build a cursor on the nullable property %s: a cursor key must be non nullable".formatted(property));
+            }
+            if (type instanceof ManagedType<?> managed) {
+                owner = managed;
+            }
+        }
     }
 
     /**

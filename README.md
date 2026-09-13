@@ -255,8 +255,16 @@ still rejected, exactly as its public name would be.
 Sorting on a nested property navigates the association with a left join, reused across the criteria reaching the
 same association: an entity whose association on the path is `null`, such as a coffee with no roaster, is still
 returned and still counted, the database placing it first or last depending on its own null ordering. Cursor
-pagination is stricter, as it always is: a `null` key has no position to seek from, so scrolling on a nested
-property backed by an optional association is rejected rather than silently skipped.
+pagination is stricter, as it always is: a `null` key has no position to seek from, so an ordering key the mapping
+declares nullable — an optional column, or an optional association anywhere along a nested path — is rejected
+before the first page is read.
+
+That check is against the mapping and not against the rows, because the symptom is not: a seek compares a key
+against the boundary one, and a comparison against `null` is never true, so no row carrying a `null` key survives
+it. Where those rows sit is up to the database, and it decides what you see — H2 and MySQL sort them first in an
+ascending order, so the very first page lands on one and the token issued for it is refused; PostgreSQL and Oracle
+sort them last there, and every database does in a descending order, so the walk simply ends on the last non-null
+key and drops the rest without a word. Declare the column `nullable = false`, or order on something else.
 
 The `getDefaultOrders()` hook is given the raw `CriteriaBuilder` and `Root`, so a default ordering on a nested
 property is up to you: `root.get("roaster").get("name")` is an implicit *inner* join and drops the entities with no
@@ -305,7 +313,8 @@ predicate would then compare terms the `ORDER BY` never used.
 The `next` and `previous` tokens returned in a `CursorResult` are opaque: send them back as is to navigate, never
 build or parse them yourself. A token is bound to the ordering it was issued for and is rejected if replayed on
 another one. Every ordering key must be a non-nullable, non-collection attribute of a supported type (the primitive
-wrapper types, `String`, `UUID`, the `java.time` types, `Date`, `BigDecimal` and `BigInteger`, and enums).
+wrapper types, `String`, `UUID`, the `java.time` types, `Date`, `BigDecimal` and `BigInteger`, and enums), which is
+checked against the mapping on the first page rather than discovered halfway through a walk.
 
 ### Walking every entity
 

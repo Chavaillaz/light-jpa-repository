@@ -52,8 +52,12 @@ public class DeliveryEntity implements Identifiable<Long> {
         @JoinColumn(name = "destination_id")
         private @Nullable RoasterEntity destination;
 
-        @Column(name = "tracking")
-        private @Nullable String tracking;
+        /**
+         * Mandatory on purpose, unlike the destination: it is what an ordering reaching through the embeddable is
+         * scrolled on, and a cursor refuses a nullable key.
+         */
+        @Column(name = "tracking", nullable = false)
+        private String tracking;
 
     }
 

@@ -285,11 +285,26 @@ class CoffeeCursorTest extends HibernateTest {
     }
 
     @Test
-    @DisplayName("rejects a nullable attribute as a cursor key")
+    @DisplayName("rejects a nullable attribute as a cursor key, before a single row is read")
     void rejectsANullableKey() {
         assertThatIllegalArgumentException()
+                .as("a seek never matches a null key, so the rows carrying one are dropped wherever the database sorts them")
                 .isThrownBy(() -> page(null, 3, Sort.parse("decaf")))
-                .withMessageContaining("Cannot build a cursor on the null property decafLabel");
+                .withMessageContaining("Cannot build a cursor on the nullable property decafLabel");
+
+        PaginationResult<CoffeeEntity> ordered = withRepository(repository -> repository.findAll(Pageable.sortedBy(Sort.parse("decaf"))));
+        assertThat(namesOf(ordered))
+                .as("the offset pagination orders on it perfectly well, only a cursor has to seek from it")
+                .hasSize(MENU.size());
+    }
+
+    @Test
+    @DisplayName("rejects a nullable association reached by a nested cursor key")
+    void rejectsANullableAssociationOnTheWay() {
+        assertThatIllegalArgumentException()
+                .as("the roaster name is mandatory, but a coffee having no roaster at all still has no key to seek from")
+                .isThrownBy(() -> page(null, 3, Sort.parse("roaster")))
+                .withMessageContaining("Cannot build a cursor on the nullable property roaster.name");
     }
 
     @Test

@@ -470,6 +470,11 @@ public class EntityQueries<E> {
      */
     public CursorResult<E> scroll(RepositoryContext<E> context, @Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Cursor cursor) {
         Sort resolvedSort = ordering.resolveSort(context, cursor.sort());
+
+        // A nullable key is refused here rather than when a token is built on it, which only catches the rows the
+        // database happens to sort onto the first page, see EntityOrdering#requireSeekable
+        resolvedSort.criteria().forEach(criterion -> ordering.requireSeekable(context, criterion.property()));
+
         CursorPosition position = Cursors.position(context.cursorCodec(), cursor, resolvedSort);
         Sort direction = Cursors.direction(resolvedSort, position);
         List<String> keyProperties = resolvedSort.criteria().stream().map(SortCriterion::property).toList();

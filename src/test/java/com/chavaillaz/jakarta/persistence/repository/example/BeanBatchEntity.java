@@ -31,7 +31,11 @@ public class BeanBatchEntity implements Identifiable<BeanBatchEntity.BatchId> {
 
     private int kilograms;
 
-    @Column(name = "label", length = 20)
+    /**
+     * Mandatory on purpose: it is what the diverging accessor below is scrolled on, and a cursor refuses a
+     * nullable key.
+     */
+    @Column(name = "label", length = 20, nullable = false)
     private @Nullable String label;
 
     /**
