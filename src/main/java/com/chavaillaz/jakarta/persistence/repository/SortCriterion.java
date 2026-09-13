@@ -38,6 +38,16 @@ public record SortCriterion(
     private static final Pattern ATTRIBUTE_PATTERN = Pattern.compile("[A-Za-z_]\\w*");
 
     /**
+     * Compiled form of the {@link #NESTING_SEPARATOR}, quoted so that a separator holding a regex
+     * metacharacter — which the dot is — splits literally, and compiled once since a criterion is built for
+     * every ordering property of every request.
+     * <p>
+     * {@link AttributePaths#split} cannot be shared here: it drops the trailing empty parts, which is what a
+     * property such as {@code roaster.} is caught by.
+     */
+    private static final Pattern NESTING_PATTERN = Pattern.compile(Pattern.quote(NESTING_SEPARATOR));
+
+    /**
      * Validates the property against {@link #ATTRIBUTE_PATTERN}, restrictive on purpose since it usually comes
      * from the API consumers.
      *
@@ -143,7 +153,7 @@ public record SortCriterion(
      * @return {@code true} if the property is valid, {@code false} otherwise
      */
     private static boolean isValid(String property) {
-        String[] attributes = property.split(Pattern.quote(NESTING_SEPARATOR), -1);
+        String[] attributes = NESTING_PATTERN.split(property, -1);
         return Arrays.stream(attributes).allMatch(attribute -> ATTRIBUTE_PATTERN.matcher(attribute).matches());
     }
 

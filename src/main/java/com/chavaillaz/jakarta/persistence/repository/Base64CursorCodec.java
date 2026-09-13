@@ -19,6 +19,12 @@ public class Base64CursorCodec implements CursorCodec {
     private static final char FORWARD = 'f';
     private static final char BACKWARD = 'b';
 
+    /**
+     * Compiled form of the {@link #SEPARATOR}, quoted so that a separator holding a regex metacharacter — which
+     * the pipe is — splits literally, and compiled once since every page requested with a token decodes one.
+     */
+    private static final Pattern SEPARATOR_PATTERN = Pattern.compile(Pattern.quote(SEPARATOR));
+
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
     private static final Base64.Decoder DECODER = Base64.getUrlDecoder();
 
@@ -62,7 +68,7 @@ public class Base64CursorCodec implements CursorCodec {
     @Override
     public CursorPosition decode(String token) {
         try {
-            String[] parts = decodeValue(token).split(Pattern.quote(SEPARATOR), -1);
+            String[] parts = SEPARATOR_PATTERN.split(decodeValue(token), -1);
             String header = parts[0];
             char direction = header.charAt(0);
             if (direction != FORWARD && direction != BACKWARD) {
