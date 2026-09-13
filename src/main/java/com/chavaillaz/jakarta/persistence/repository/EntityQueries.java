@@ -318,17 +318,30 @@ public class EntityQueries<E> {
     /**
      * Searches for the entities of a related type matching the given restriction, for the repositories exposing
      * the entities gravitating around the managed one, such as the children of an association.
+     * <p>
+     * The results are ordered by the identifier of the <em>related</em> entity, and not by the ordering rules of
+     * the repository, which are those of the entity it manages and say nothing about another type. That is the
+     * one ordering the metamodel alone provides, and it is enough for the results to come back in a stable order
+     * rather than in whatever order the database happened to produce, which is what every other query of this
+     * library guarantees. Order a related search on business attributes by writing it as a query of the
+     * repository managing that type.
      *
      * @param context     The repository the query is written for
      * @param <R>         The type of the related entity
      * @param relatedType The type of the related entity
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
      *                    the entities
-     * @return The matching entities
+     * @return The matching entities, ordered by their identifier
      */
     public <R> List<R> search(RepositoryContext<E> context, Class<R> relatedType, @Nullable Restriction<? super R> restriction) {
+        EntityOrdering<R> relatedOrdering = EntityOrdering.of(relatedType);
+
         return SelectionSpecification.create(relatedType)
                 .restrict(restriction == null ? unrestricted() : restriction)
+                .augment((criteriaBuilder, query, root) -> query.orderBy(relatedOrdering
+                        .getIdPaths(context.entityManager(), root)
+                        .map(criteriaBuilder::asc)
+                        .toList()))
                 .createQuery(context.entityManager())
                 .getResultList();
     }

@@ -375,12 +375,16 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     /**
      * Searches for the entities of a related type matching the given restriction, for the repositories exposing
      * the entities gravitating around the managed one, such as the children of an association.
+     * <p>
+     * The results are ordered by the identifier of the related entity: the ordering hooks of this repository
+     * describe the entity it manages and say nothing about another type, but a result set still has to come back
+     * in a stable order rather than in whatever order the database happened to produce.
      *
      * @param <R>         The type of the related entity
      * @param relatedType The type of the related entity
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
      *                    the entities
-     * @return The matching entities
+     * @return The matching entities, ordered by their identifier
      * @see EntityQueries#search(RepositoryContext, Class, Restriction)
      */
     protected <R> List<R> search(Class<R> relatedType, @Nullable Restriction<? super R> restriction) {

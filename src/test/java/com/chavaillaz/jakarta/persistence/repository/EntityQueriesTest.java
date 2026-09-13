@@ -117,6 +117,25 @@ class EntityQueriesTest extends HibernateTest {
     }
 
     @Test
+    @DisplayName("orders a related search on the identifier of the related type, and not on the ordering of this one")
+    void ordersARelatedSearchOnItsOwnIdentifier() {
+        recordStatements();
+
+        List<TastingNoteEntity> notes = withQueries((queries, context) -> queries.search(context, TastingNoteEntity.class, null));
+
+        assertThat(notes)
+                .as("a related search must not hand back the rows in whatever order the database produced")
+                .extracting(TastingNoteEntity::getId)
+                .isSorted();
+        assertThat(statements())
+                .filteredOn(statement -> statement.contains("from tasting_note"))
+                .singleElement(as(STRING))
+                .as("the ordering of the repository is that of the coffees, which says nothing about a note")
+                .containsIgnoringCase("order by")
+                .doesNotContainIgnoringCase("name");
+    }
+
+    @Test
     @DisplayName("scrolls with the restriction, the criteria and the seek predicate combined")
     void scrollsWithEverythingCombined() {
         Restriction<CoffeeEntity> ethiopian = equal(CoffeeEntity_.origin, ETHIOPIA);

@@ -2,6 +2,7 @@ package com.chavaillaz.jakarta.persistence.repository;
 
 import static java.util.Comparator.comparing;
 
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
@@ -381,7 +382,25 @@ public class EntityOrdering<E> {
      * @return The paths to order on
      */
     public Stream<Path<?>> getIdPaths(RepositoryContext<E> context, Root<E> root) {
-        EntityType<E> entityMetamodel = context.entityManager().getMetamodel().entity(entityType);
+        return getIdPaths(context.entityManager(), root);
+    }
+
+    /**
+     * Gets the paths to the attributes composing the identifier of the managed entity, taking the entity manager
+     * on its own rather than the whole context of a repository.
+     * <p>
+     * The identifier is the one part of an ordering a repository has no say over: no hook of it is read here,
+     * only the metamodel. This is therefore what the queries over a type no repository is written for are ordered
+     * with, such as the
+     * {@link EntityQueries#search(RepositoryContext, Class, org.hibernate.query.restriction.Restriction) related entity search},
+     * whose rows would otherwise come back in whatever order the database happened to produce.
+     *
+     * @param entityManager The entity manager holding the metamodel the identifier is read from
+     * @param root          The root entity of the query
+     * @return The paths to order on
+     */
+    public Stream<Path<?>> getIdPaths(EntityManager entityManager, Root<E> root) {
+        EntityType<E> entityMetamodel = entityManager.getMetamodel().entity(entityType);
 
         // Composite identifier declared with an identifier class, spread over several attributes
         if (!entityMetamodel.hasSingleIdAttribute()) {
