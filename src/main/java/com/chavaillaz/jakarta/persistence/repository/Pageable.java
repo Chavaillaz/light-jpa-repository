@@ -5,18 +5,13 @@ import org.jspecify.annotations.Nullable;
 /**
  * Slice of results requested for a query, made of the page coordinates and of the ordering to apply.
  * <p>
- * The ordering is carried along, because paginating without a deterministic total order returns unstable pages:
- * the database is free to return the rows in an arbitrary order, which may differ from one page to the next and
- * therefore duplicate or skip items. A {@link Sort} stays usable on its own though, for the queries returning all
- * the results, which is why both types remain distinct, this one only composing the other.
+ * The ordering is carried along, because paginating without a deterministic total order returns unstable pages,
+ * a {@link Sort} staying usable on its own for the queries returning all the results.
  * <p>
- * The coordinates are plain numbers rather than nullable boxes. A coordinate that cannot address a page — a
- * missing one, a negative page number or a non-positive size — is normalized to {@value #NO_PAGINATION}, which
- * is the single value the whole library reads as "not requested": an absent coordinate and an invalid one are
- * the same request, and neither has to be told apart nor unboxed to be used. The pagination is only applied when
- * both coordinates address a page, which {@link #isPaginated()} answers; {@link #UNPAGED} expresses its absence
- * explicitly, and the {@link #of(Integer, Integer, Sort)} factories accept the {@code null} an absent query
- * parameter is deserialized as.
+ * A coordinate that cannot address a page — a missing one, a negative page number or a non-positive size — is
+ * normalized to {@value #NO_PAGINATION}, so that {@link #isPaginated()} is the single place reading them and an
+ * invalid coordinate never has to be told apart from an absent one. The {@link #of(Integer, Integer, Sort)}
+ * factories accept the {@code null} an absent query parameter is deserialized as.
  *
  * @param page The page number, starting at zero, {@value #NO_PAGINATION} when the pagination is disabled
  * @param size The number of items per page, {@value #NO_PAGINATION} when the pagination is disabled
@@ -44,14 +39,12 @@ public record Pageable(
     public static final int MAX_SIZE = 1_000;
 
     /**
-     * Defaults the ordering to {@link Sort#NONE}, so that every other collaborator can assume it is always set,
-     * caps the requested size to {@value #MAX_SIZE}, and normalizes coordinates that cannot address a page to
-     * {@value #NO_PAGINATION}, so that {@link #isPaginated()} is the single place reading them.
+     * Defaults the ordering to {@link Sort#NONE}, caps the requested size to {@value #MAX_SIZE}, and normalizes the
+     * coordinates that cannot address a page to {@value #NO_PAGINATION}.
      */
     public Pageable {
         sort = sort == null ? Sort.NONE : sort;
-        // Each coordinate is normalized on its own, so that a page requested without a size, or the other way
-        // round, still carries the one the consumer did send for orDefault to complete
+        // Normalized one by one, so that orDefault can complete the coordinate a consumer left out
         page = page < 0 ? NO_PAGINATION : page;
         size = size < 1 ? NO_PAGINATION : Math.min(size, MAX_SIZE);
     }
@@ -124,9 +117,8 @@ public record Pageable(
      * Derives a request falling back to the given page coordinates when they are not set, for the endpoints
      * paginating by default.
      * <p>
-     * Coordinates that cannot address a page, such as a negative page number, are replaced as a missing one is:
-     * an endpoint paginating by default means to paginate, and returning the whole table because a consumer sent
-     * {@code page=-1} is not what it asked for.
+     * A coordinate that cannot address a page, such as a negative page number, is replaced as a missing one is,
+     * so that such an endpoint never returns the whole table.
      *
      * @param defaultPage The page number to apply when none is requested
      * @param defaultSize The number of items per page to apply when none is requested

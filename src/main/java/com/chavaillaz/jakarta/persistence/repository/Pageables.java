@@ -30,11 +30,9 @@ public final class Pageables {
     }
 
     /**
-     * Checks whether the offset of the requested page does not fit in an {@code int}, which is what the JPA
-     * providers and the JDBC drivers take as a first result.
-     * <p>
-     * The page number comes straight from the API consumers, so a page far beyond the end must not surface as a
-     * server error: such a page holds no item anyway and is returned empty, its total being still computed.
+     * Checks whether the offset of the requested page overflows the {@code int} the JPA providers and the JDBC
+     * drivers take as a first result, which a page number sent by an API consumer is free to make it do. Such a
+     * page holds no item anyway.
      *
      * @param pageable The requested page, which must be {@link Pageable#isPaginated() paginated}
      * @return {@code true} if the offset of the page overflows, {@code false} otherwise
@@ -44,8 +42,8 @@ public final class Pageables {
     }
 
     /**
-     * Applies the pagination to the given query, doing nothing when the pagination is not requested, invalid or
-     * beyond the largest offset a query can express.
+     * Applies the pagination to the given query, leaving it unpaginated when no valid page is requested, and
+     * fetching nothing for a page beyond the largest offset a query can express.
      *
      * @param query    The query to paginate
      * @param pageable The requested page
@@ -56,8 +54,7 @@ public final class Pageables {
             return;
         }
         if (overflows(pageable)) {
-            // Such a page is empty, which is expressed by fetching nothing rather than by leaving the query
-            // unpaginated, which would return the whole table instead
+            // Left unpaginated, the query would return the whole table instead of an empty page
             query.setMaxResults(0);
             return;
         }

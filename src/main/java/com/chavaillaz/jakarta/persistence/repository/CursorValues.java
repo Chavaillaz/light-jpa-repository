@@ -25,19 +25,16 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Conversion of the cursor keys between their textual representation, which travels within the token, and the
- * Java type of the corresponding attribute, taken from the metamodel when the seek predicate is built.
+ * Java type of the corresponding attribute, which the metamodel reports when the seek predicate is built.
  * <p>
- * The type is deliberately not stored in the token: relying on the metamodel keeps the tokens short and makes a
- * type change fail loudly instead of binding a stale value. What {@link #format} writes and what {@link #parse}
- * reads must therefore agree on every type a provider may hand over: a value formatted as a key of a type nothing
- * can read back would issue a first page whose token the very next call rejects, stranding the consumer on a page
- * it cannot leave.
+ * The type is not stored in the token, which keeps it short and makes a type change fail loudly. What
+ * {@link #format} writes and what {@link #parse} reads must therefore agree on every type: a key nothing can read
+ * back would issue a first page whose token the very next call refuses.
  */
 public final class CursorValues {
 
     /**
-     * Number of nanoseconds in a millisecond, which is the finest precision the epoch millisecond count a date key
-     * travels as can express.
+     * Number of nanoseconds in a millisecond, the precision of the epoch millisecond count a date key travels as.
      */
     private static final int NANOS_PER_MILLISECOND = 1_000_000;
 
@@ -63,8 +60,8 @@ public final class CursorValues {
             Map.entry(ZonedDateTime.class, ZonedDateTime::parse),
             Map.entry(Year.class, Year::parse),
             Map.entry(Duration.class, Duration::parse),
-            // Every date subtype a provider hands back is read from the very same epoch millisecond count format
-            // writes, the declared type of the attribute being what decides which one the key is bound as
+            // Every date type is read back from the epoch millisecond count format writes, the declared type of the
+            // attribute deciding which one the key is bound as
             Map.entry(Date.class, value -> new Date(parseLong(value))),
             Map.entry(Timestamp.class, value -> new Timestamp(parseLong(value))),
             Map.entry(java.sql.Date.class, value -> new java.sql.Date(parseLong(value))),
@@ -81,9 +78,8 @@ public final class CursorValues {
      * @param value    The value to format, {@code null} rejected since a nullable attribute is unusable as a
      *                 cursor key
      * @return The corresponding textual representation
-     * @throws IllegalArgumentException if the value is {@code null}, a nullable attribute being unusable as a
-     *                                  cursor key, if its type cannot be {@link #parse parsed back}, or if a date
-     *                                  carries a precision finer than the millisecond
+     * @throws IllegalArgumentException if the value is {@code null}, if its type cannot be {@link #parse parsed
+     *                                  back}, or if a date carries a precision finer than the millisecond
      */
     public static String format(String property, @Nullable Object value) {
         return switch (value) {
@@ -95,17 +91,12 @@ public final class CursorValues {
     }
 
     /**
-     * Gets the epoch millisecond count of a date key, refusing the finer precision the token cannot carry.
+     * Gets the epoch millisecond count of a date key, refusing the finer precision a {@link Timestamp} may carry.
      * <p>
-     * A date travels as its epoch millisecond count, which is all a {@link Date} holds, but a column read into a
-     * {@link Timestamp} may hold microseconds or nanoseconds, which the databases keeping a timestamp at that
-     * precision do return. Truncating them would issue a token whose key is strictly before the boundary row
-     * itself, so the seek predicate would return that very row again: the next page starts where the previous one
-     * did, and a walk over such a column never advances. Rejecting the key surfaces that as a plain error while
-     * the token is still being built, rather than as a page repeating forever.
-     * <p>
-     * Order on an attribute mapped to {@link Instant} or to {@link LocalDateTime}, whose keys carry
-     * their nanoseconds, or teach a {@link CursorKeyCodec} how to represent the precision of that column.
+     * Truncating it would issue a key strictly before the boundary row itself, which the seek predicate would
+     * then return again, so that the walk would never advance. Order on an attribute mapped to {@link Instant} or
+     * to {@link LocalDateTime}, whose keys carry their nanoseconds, or teach that precision to a
+     * {@link CursorKeyCodec}.
      *
      * @param property The property the value belongs to, used to name it in the error message
      * @param date     The date to read the epoch millisecond count of
@@ -120,14 +111,9 @@ public final class CursorValues {
     }
 
     /**
-     * Checks that a value belongs to a type the parsers can read back, so that a key which is only unusable once
-     * the consumer sends it back is refused while the token is still being built.
-     * <p>
-     * Without it, {@code toString()} formats anything: ordering on an association, on an embeddable or on a
-     * converted attribute yields a first page carrying a perfectly valid looking token, which the very next call
-     * rejects as an unsupported cursor key type. The consumer is then stranded on a page it cannot leave, and the
-     * default representation of the value, which names its class and its identity hash, has meanwhile travelled
-     * out as part of an opaque token.
+     * Checks that a value belongs to a type the parsers can read back, so that an unusable key is refused while
+     * the token is still being built rather than once the consumer sends it back, and so that the default
+     * {@code toString} of an association, an embeddable or a converted value never leaks into a token.
      *
      * @param property The property the value belongs to, used to name it in the error message
      * @param value    The value to check
@@ -144,10 +130,8 @@ public final class CursorValues {
     /**
      * Parses a textual cursor key back into the Java type the metamodel reports for the attribute.
      * <p>
-     * This is the single place where the type safety of the cursor keys cannot be proven by the compiler: the
-     * type is only known at runtime, from the path being sought on. It is guaranteed instead by construction,
-     * every supported type being parsed by the parser registered for it, and the returned instance being
-     * therefore always an instance of the requested type.
+     * The type is only known at runtime, from the path being sought on, so the returned value cannot be checked
+     * by the compiler: it holds by construction, each type being read by the parser registered for it.
      *
      * @param <Y>   The type of the attribute, inferred from the requested class
      * @param value The textual representation of the key, as it travels within the token
@@ -173,9 +157,8 @@ public final class CursorValues {
         try {
             return (Y) parser.apply(value);
         } catch (RuntimeException e) {
-            // The value comes from a token an API consumer sent back, so it may be anything: whatever the
-            // underlying parser throws is surfaced as a malformed cursor, which the API layer answers with a
-            // 400 Bad Request, instead of leaking as an arbitrary runtime failure
+            // The value comes from a token an API consumer sent back, so whatever the parser throws is a malformed
+            // cursor, which the API layer answers with a 400 Bad Request
             throw new IllegalArgumentException("Invalid cursor key value %s for the type %s".formatted(value, type.getName()), e);
         }
     }
@@ -184,7 +167,7 @@ public final class CursorValues {
         return switch (value) {
             case "true" -> Boolean.TRUE;
             case "false" -> Boolean.FALSE;
-            // Boolean#valueOf would silently read any other text as false, seeking on a value nothing issued
+            // Boolean#valueOf would silently read any other text as false
             default -> throw new IllegalArgumentException("Expected true or false, got " + value);
         };
     }

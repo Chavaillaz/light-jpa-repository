@@ -48,8 +48,7 @@ public record PaginationResult<T>(
      * @return The corresponding page
      */
     public static <T> PaginationResult<T> of(List<T> items, int currentPage, int pageSize, long totalItems) {
-        // Both are computed on a long and then narrowed: a page number an API consumer is free to set as high as
-        // it wants would otherwise overflow, reporting a following page for a page far beyond the last one
+        // Computed on a long, a page number sent by an API consumer being free to overflow an int
         long pages = (pageSize <= 0) ? 0 : (long) ceil((double) totalItems / pageSize);
         int totalPages = (int) min(pages, Integer.MAX_VALUE);
         return new PaginationResult<>(

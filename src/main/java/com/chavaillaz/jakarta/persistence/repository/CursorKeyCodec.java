@@ -6,14 +6,10 @@ import org.jspecify.annotations.Nullable;
  * Codec of the cursor key values, turning the value of an ordering attribute into the textual representation
  * carried within a cursor token, and back into the Java type the metamodel reports for that attribute.
  * <p>
- * Unlike {@link CursorCodec}, which encodes the whole boundary position into the opaque token exposed to the API
- * consumers, this codec only handles a single key of that position, at the attribute type level. The two are
- * therefore independent extension points: overriding one does not require overriding the other.
- * <p>
- * {@link CursorValues} covers every attribute type supported out of the box. Override this contract to support an
- * attribute type it does not, such as a custom identifier type or one behind an attribute converter, or to carry
- * a precision the default representation drops, typically by delegating to {@link CursorValues} for every other
- * type.
+ * It handles a single key of a position, independently of the {@link CursorCodec} encoding the whole position into
+ * the token. Override it to support an attribute type {@link CursorValues} does not, such as a custom identifier
+ * type or one behind an attribute converter, or to carry a precision the default representation drops, typically
+ * delegating to {@link #DEFAULT} for every other type.
  */
 public interface CursorKeyCodec {
 

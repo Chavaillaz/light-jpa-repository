@@ -10,8 +10,7 @@ import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Walk of the pages of a cursor query, fetching a page only once every item of the previous one was handed
- * over, whether the stream is consumed by a terminal operation or pulled through its iterator.
+ * Walk of the pages of a cursor query, fetching a page only once every item of the previous one was handed over.
  *
  * @param <T> The type of the returned items
  * @see Cursors#stream(Function, Sort, int)
@@ -23,8 +22,7 @@ final class PageWalk<T> extends Spliterators.AbstractSpliterator<T> {
     private final int pageSize;
 
     /**
-     * The request of the page to fetch once the items at hand are exhausted, {@code null} when the walk is
-     * over. Nothing is fetched on construction, so that a stream nobody consumes issues no query at all.
+     * The request of the page to fetch once the items at hand are exhausted, {@code null} when the walk is over.
      */
     private @Nullable Cursor following;
 
@@ -46,8 +44,7 @@ final class PageWalk<T> extends Spliterators.AbstractSpliterator<T> {
             }
             CursorResult<T> page = pages.apply(following);
             items = page.items().iterator();
-            // The token is what makes the walk progress: a page announcing a successor without handing one
-            // over would otherwise be requested as a first page again, and the walk would never terminate
+            // A page announcing a successor without its token would otherwise restart the walk from the first page
             following = page.hasNext() && page.next() != null ? Cursor.of(page.next(), pageSize, sort) : null;
         }
         action.accept(items.next());
@@ -56,8 +53,7 @@ final class PageWalk<T> extends Spliterators.AbstractSpliterator<T> {
 
     @Override
     public @Nullable Spliterator<T> trySplit() {
-        // The pages are fetched through an entity manager, which is neither thread safe nor usable outside the
-        // thread of its transaction: a split would have another thread pull the following items, and query
+        // The pages are fetched through an entity manager, which is bound to the thread of its transaction
         return null;
     }
 

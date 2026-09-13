@@ -20,8 +20,7 @@ public class Base64CursorCodec implements CursorCodec {
     private static final char BACKWARD = 'b';
 
     /**
-     * Compiled form of the {@link #SEPARATOR}, quoted so that a separator holding a regex metacharacter — which
-     * the pipe is — splits literally, and compiled once since every page requested with a token decodes one.
+     * Compiled form of the {@link #SEPARATOR}, quoted since the pipe is a regex metacharacter.
      */
     private static final Pattern SEPARATOR_PATTERN = Pattern.compile(Pattern.quote(SEPARATOR));
 
@@ -72,8 +71,7 @@ public class Base64CursorCodec implements CursorCodec {
             String header = parts[0];
             char direction = header.charAt(0);
             if (direction != FORWARD && direction != BACKWARD) {
-                // Anything else was not produced by this codec: a token whose direction is silently read as
-                // forward would seek the wrong way and return a page the consumer never asked for
+                // Not produced by this codec, and read as forward it would seek the wrong way
                 throw new IllegalArgumentException("Unknown cursor direction " + direction);
             }
             return new CursorPosition(

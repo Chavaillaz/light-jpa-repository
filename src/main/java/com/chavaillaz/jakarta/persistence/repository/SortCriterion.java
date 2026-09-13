@@ -38,12 +38,9 @@ public record SortCriterion(
     private static final Pattern ATTRIBUTE_PATTERN = Pattern.compile("[A-Za-z_]\\w*");
 
     /**
-     * Compiled form of the {@link #NESTING_SEPARATOR}, quoted so that a separator holding a regex
-     * metacharacter — which the dot is — splits literally, and compiled once since a criterion is built for
-     * every ordering property of every request.
-     * <p>
-     * {@link AttributePaths#split} cannot be shared here: it drops the trailing empty parts, which is what a
-     * property such as {@code roaster.} is caught by.
+     * Compiled form of the {@link #NESTING_SEPARATOR}, quoted since the dot is a regex metacharacter.
+     * {@link AttributePaths#split} is not reused, since it drops the trailing empty part refusing a property such
+     * as {@code roaster.}.
      */
     private static final Pattern NESTING_PATTERN = Pattern.compile(Pattern.quote(NESTING_SEPARATOR));
 
@@ -101,18 +98,13 @@ public record SortCriterion(
 
     /**
      * Creates an ascending criterion on the given attribute path of the static metamodel, a nested property being
-     * expressed as several attributes, such as {@code CoffeeEntity_.roaster, RoasterEntity_.name}.
+     * expressed as several attributes, such as {@code CoffeeEntity_.roaster, RoasterEntity_.name}, so that a
+     * rename of the attribute fails the build instead of misbehaving at runtime.
      * <p>
-     * Building the criterion from the metamodel instead of a plain string makes a rename of the underlying
-     * attribute fail the build instead of silently misbehaving at runtime.
-     * <p>
-     * Unlike the plain string overload, this one requires the given attributes to already be initialized: a JPA
-     * provider populates a generated static metamodel field the first time it bootstraps a persistence unit
-     * mapping the owning entity, the field staying {@code null} beforehand. Call this from code that runs after
-     * that bootstrap, such as a repository finder method, not from a static initializer.
-     * <p>
-     * When the repository declares searchable properties, the resolved path must already be the target of one of
-     * them, under whatever public alias; see {@link EntityOrdering#resolveProperty(RepositoryContext, String)}.
+     * The attributes must already be initialized, which a JPA provider does when it bootstraps a persistence unit
+     * mapping the owning entity: call this from a repository method, not from a static initializer. When the
+     * repository declares searchable properties, the path must be the target of one of them, see
+     * {@link EntityOrdering#resolveProperty(RepositoryContext, String)}.
      *
      * @param path The attribute path to sort on, from the static metamodel
      * @return The corresponding criterion
@@ -124,13 +116,10 @@ public record SortCriterion(
     /**
      * Creates a descending criterion on the given attribute path of the static metamodel, a nested property being
      * expressed as several attributes, such as {@code CoffeeEntity_.roaster, RoasterEntity_.name}.
-     * <p>
-     * Building the criterion from the metamodel instead of a plain string makes a rename of the underlying
-     * attribute fail the build instead of silently misbehaving at runtime.
      *
      * @param path The attribute path to sort on, from the static metamodel
      * @return The corresponding criterion
-     * @see #asc(Attribute[]) for the requirement on the attributes being already initialized
+     * @see #asc(Attribute[]) for the requirements on the attributes
      */
     public static SortCriterion desc(Attribute<?, ?>... path) {
         return desc(pathOf(path));

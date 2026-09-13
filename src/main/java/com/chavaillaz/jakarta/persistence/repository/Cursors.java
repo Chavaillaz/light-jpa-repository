@@ -16,16 +16,15 @@ import java.util.stream.StreamSupport;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Cursor helpers shared by the query collaborators of the repositories.
- * <p>
- * The {@link Cursor} itself stays free of any persistence dependency, this class holding the decoding of the
- * requested position, the direction of the walk and the assembly of the resulting page.
+ * Cursor helpers shared by the query collaborators of the repositories: the decoding of the requested position,
+ * the direction of the walk and the assembly of the resulting page, the {@link Cursor} itself staying free of any
+ * persistence dependency.
  */
 public final class Cursors {
 
     /**
-     * Number of bytes of the digest kept as the fingerprint of an ordering, wide enough for two orderings never
-     * to collide by accident while keeping the tokens short.
+     * Number of bytes of the digest kept as the fingerprint of an ordering, enough to rule out an accidental
+     * collision while keeping the tokens short.
      */
     private static final int FINGERPRINT_LENGTH = 8;
 
@@ -34,9 +33,8 @@ public final class Cursors {
     }
 
     /**
-     * Decodes the requested position and checks that it was issued for the very same ordering, replaying a token
-     * on another ordering being meaningless: the seek predicate would then keep rows the ordering does not place
-     * after the boundary one.
+     * Decodes the requested position and checks that it was issued for the very same ordering, the seek predicate
+     * of a position being meaningless for another one.
      *
      * @param codec        The codec to decode the token with
      * @param cursor       The requested position, size and ordering
@@ -79,10 +77,8 @@ public final class Cursors {
     }
 
     /**
-     * Builds the resulting page from the fetched rows, which contain one extra row when another page exists.
-     * <p>
-     * The extra row is dropped, the page is put back in the natural ordering when walking backwards, and the
-     * tokens of the surrounding pages are derived from the boundary rows.
+     * Builds the resulting page from the fetched rows, reading the ordering keys of the boundary rows back off the
+     * items themselves, for a query selecting the entity alone.
      *
      * @param <T>          The type of the returned items
      * @param codec        The codec to encode the surrounding tokens with
@@ -92,9 +88,10 @@ public final class Cursors {
      * @param position     The requested position, or {@code null} for the first page
      * @param keyCodec     The codec formatting the ordering keys of the boundary rows into the tokens
      * @return The corresponding page, with the tokens of the surrounding ones
+     * @see Keysets#valuesOf(Object, Sort, CursorKeyCodec)
      */
     public static <T> CursorResult<T> toResult(CursorCodec codec, List<T> fetched, Cursor cursor, Sort resolvedSort, @Nullable CursorPosition position, CursorKeyCodec keyCodec) {
-        // The keys are read lazily, so that only the boundary rows of the page are actually reflected upon
+        // Read lazily, so that only the boundary rows are reflected upon
         List<Supplier<List<String>>> keys = fetched.stream()
                 .<Supplier<List<String>>>map(item -> () -> Keysets.valuesOf(item, resolvedSort, keyCodec))
                 .toList();
@@ -102,12 +99,11 @@ public final class Cursors {
     }
 
     /**
-     * Builds the resulting page from the fetched rows and from the ordering keys the query itself returned.
+     * Builds the resulting page from the fetched rows, which contain one extra row when another page exists, and
+     * from the ordering keys the query selected alongside them.
      * <p>
-     * Reading the keys back from the entity is only a fallback: the {@code order by} clause compares the value
-     * the database holds, whereas an entity exposes the value its accessor returns, and nothing guarantees the
-     * two are the same. Selecting the keys alongside the entity keeps the token and the seek predicate expressed
-     * in the very same terms.
+     * The extra row is dropped, a backward page is put back in the natural ordering, and the tokens of the
+     * surrounding pages are built from the keys of the boundary rows.
      *
      * @param <T>          The type of the returned items
      * @param codec        The codec to encode the surrounding tokens with
@@ -131,19 +127,18 @@ public final class Cursors {
         }
         if (items.isEmpty()) {
             if (position == null) {
-                // The very first page is empty, so nothing matches at all and there is nowhere to navigate to
+                // Nothing matches at all, so there is nowhere to navigate to
                 return CursorResult.empty(cursor.size());
             }
 
-            // Walking onto an emptied page, the rows we came from having been deleted in between, the consumer
-            // would otherwise be stranded with no token at all: the position it walked from is re-issued in the
-            // opposite direction, so that it can still reach whatever now lies on the side it came from
+            // The rows walked onto were deleted in between: the position is re-issued in the opposite direction,
+            // so that the consumer is not stranded on an empty page holding no token at all
             return backward
                     ? new CursorResult<>(List.of(), cursor.size(), reissued(codec, position, resolvedSort, false), null, true, false)
                     : new CursorResult<>(List.of(), cursor.size(), null, reissued(codec, position, resolvedSort, true), false, true);
         }
 
-        // Walking backwards, a following page necessarily exists, since it is the one we come from
+        // A backward walk comes from the following page, which therefore exists
         boolean hasNext = backward || hasMore;
         boolean hasPrevious = backward ? hasMore : position != null;
         String fingerprint = fingerprint(resolvedSort);
@@ -158,14 +153,13 @@ public final class Cursors {
     }
 
     /**
-     * Lazily walks every entity a cursor query returns, fetching a page at a time instead of loading the whole
+     * Lazily walks every item a cursor query returns, fetching a page at a time instead of loading the whole
      * result set at once.
      * <p>
-     * The pages are fetched on demand as the stream is consumed, so a short-circuiting operation such as
-     * {@link Stream#limit(long)} or {@link Stream#findFirst()} fetches only the pages it actually needs, and so
-     * does an {@link Stream#iterator() iterator} pulling the items one at a time. Only the fetching is lazy
-     * though, not the retention: the entities walked stay managed by the persistence context until the
-     * transaction ends, and the stream must be consumed within that very same transaction.
+     * A page is only fetched once the items of the previous one were consumed, be it by a short-circuiting
+     * operation such as {@link Stream#limit(long)} or through the {@link Stream#iterator() iterator}. Only the
+     * fetching is lazy, not the retention: the entities walked stay managed until the transaction ends, and the
+     * stream must be consumed within that very transaction.
      *
      * @param <T>      The type of the returned items
      * @param pages    The page fetcher, which is the cursor query being walked
@@ -174,21 +168,17 @@ public final class Cursors {
      * @return The lazy stream of every matching item, in the requested ordering
      */
     public static <T> Stream<T> stream(Function<Cursor, CursorResult<T>> pages, Sort sort, int pageSize) {
-        // A spliterator of its own rather than a flat mapped iteration of the pages: flatMap only stays lazy for a
-        // short-circuiting terminal operation, and pushes the whole inner iteration, every page of it, into a
-        // buffer as soon as the stream is pulled through its iterator or its spliterator instead
+        // A spliterator of its own, a flat mapped iteration of the pages buffering every one of them as soon as the
+        // stream is pulled through its iterator
         return StreamSupport.stream(new PageWalk<>(pages, sort, pageSize), false);
     }
 
     /**
      * Computes the fingerprint of an ordering, which binds a token to the ordering it was issued for.
      * <p>
-     * A digest is used rather than the hash code of the textual ordering: two orderings sharing a 32 bit hash are
-     * trivially written down by hand, {@code "Aa"} and {@code "BB"} being the classic pair, and a colliding
-     * ordering of the same arity replays a token the seek predicate then compares against the wrong keys, which
-     * is precisely what the fingerprint exists to prevent. This remains an accident guard and not an integrity
-     * tag, a consumer being free to compute the fingerprint of any ordering it likes; reject forged positions by
-     * signing them in a {@link CursorCodec} instead.
+     * A digest is used rather than a 32 bit hash code, two colliding orderings being trivially written, such as
+     * {@code Aa} and {@code BB}. It guards against an accidental replay and is no integrity tag, anyone being able
+     * to compute the fingerprint of an ordering: reject forged positions by signing them in a {@link CursorCodec}.
      *
      * @param sort The ordering to fingerprint
      * @return The corresponding fingerprint
@@ -207,7 +197,7 @@ public final class Cursors {
         try {
             return MessageDigest.getInstance("SHA-256").digest(ordering.getBytes(UTF_8));
         } catch (NoSuchAlgorithmException e) {
-            // Every Java platform is required to provide SHA-256, so this cannot happen on a conformant runtime
+            // Every Java platform is required to provide SHA-256
             throw new IllegalStateException("The SHA-256 digest the cursor fingerprints are computed with is missing", e);
         }
     }
