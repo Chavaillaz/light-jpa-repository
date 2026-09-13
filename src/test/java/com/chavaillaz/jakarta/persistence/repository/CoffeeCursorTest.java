@@ -307,7 +307,7 @@ class CoffeeCursorTest extends HibernateTest {
         assertThatIllegalArgumentException()
                 .as("a seek never matches a null key, so the rows carrying one are dropped wherever the database sorts them")
                 .isThrownBy(() -> page(null, 3, Sort.parse("decaf")))
-                .withMessageContaining("Cannot build a cursor on the nullable property decafLabel");
+                .withMessageContaining("Cannot build a cursor on nullable property decafLabel");
 
         PaginationResult<CoffeeEntity> ordered = withRepository(repository -> repository.findAll(Pageable.sortedBy(Sort.parse("decaf"))));
         assertThat(namesOf(ordered))
@@ -321,7 +321,7 @@ class CoffeeCursorTest extends HibernateTest {
         assertThatIllegalArgumentException()
                 .as("the roaster name is mandatory, but a coffee having no roaster at all still has no key to seek from")
                 .isThrownBy(() -> page(null, 3, Sort.parse("roaster")))
-                .withMessageContaining("Cannot build a cursor on the nullable property roaster.name");
+                .withMessageContaining("Cannot build a cursor on nullable property roaster.name");
     }
 
     @Test

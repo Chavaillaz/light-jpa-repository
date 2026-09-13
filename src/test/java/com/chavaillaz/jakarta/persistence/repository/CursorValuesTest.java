@@ -121,7 +121,7 @@ class CursorValuesTest {
     void rejectsANullKey() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> CursorValues.format("decafLabel", null))
-                .withMessage("Cannot build a cursor on the null property decafLabel: a cursor key must be non nullable");
+                .withMessage("Cannot build a cursor on null property decafLabel: a cursor key must be non nullable");
     }
 
     @Test
@@ -129,7 +129,7 @@ class CursorValuesTest {
     void rejectsFormattingAnUnsupportedType() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> CursorValues.format("roaster", new Object()))
-                .withMessageContaining("Cannot build a cursor on the property roaster")
+                .withMessageContaining("Cannot build a cursor on property roaster")
                 .withMessageContaining("java.lang.Object is not a supported cursor key type");
     }
 

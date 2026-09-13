@@ -113,7 +113,7 @@ class KeysetsTest extends HibernateTest {
 
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> Keysets.valuesOf(coffee, Sort.parse("decafLabel"), CursorKeyCodec.DEFAULT))
-                .withMessageContaining("Cannot build a cursor on the null property decafLabel");
+                .withMessageContaining("Cannot build a cursor on null property decafLabel");
     }
 
     @Test
@@ -129,7 +129,7 @@ class KeysetsTest extends HibernateTest {
     void rejectsAnUnreadableKey() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> Keysets.valuesOf(coffee(GEISHA), Sort.parse("caffeine"), CursorKeyCodec.DEFAULT))
-                .withMessageContaining("Cannot read the attribute caffeine");
+                .withMessageContaining("Cannot read attribute caffeine");
     }
 
     @Test

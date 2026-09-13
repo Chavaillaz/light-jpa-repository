@@ -256,7 +256,7 @@ class CoffeeRepositoryTest extends HibernateTest {
 
             assertThatExceptionOfType(NoSuchElementException.class)
                     .isThrownBy(() -> repository.lock(ghost))
-                    .withMessageContaining("No entity found with the identifier -1")
+                    .withMessageContaining("No entity found with identifier -1")
                     .withMessageContaining(CoffeeRepositoryJpa.class.getSimpleName());
         });
     }
@@ -333,7 +333,7 @@ class CoffeeRepositoryTest extends HibernateTest {
             assertThatExceptionOfType(NoSuchElementException.class)
                     .as("a detached entity whose row no longer exists must not be silently re-inserted then removed")
                     .isThrownBy(() -> repository.delete(ghost))
-                    .withMessageContaining("No entity found with the identifier -1");
+                    .withMessageContaining("No entity found with identifier -1");
         });
     }
 

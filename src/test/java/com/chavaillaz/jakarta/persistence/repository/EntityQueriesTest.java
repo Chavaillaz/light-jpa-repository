@@ -157,7 +157,7 @@ class EntityQueriesTest extends HibernateTest {
         assertThatIllegalArgumentException()
                 .as("ordering on the association itself makes a perfectly valid SQL ordering, but no cursor key")
                 .isThrownBy(() -> withQueries((queries, context) -> queries.scroll(context, null, null, Cursor.first(2, Sort.parse("roaster")))))
-                .withMessageContaining("Cannot build a cursor on the nullable property roaster");
+                .withMessageContaining("Cannot build a cursor on nullable property roaster");
 
         assertThat(withQueries((queries, context) -> queries.search(context, null, null, Pageable.of(0, 2, Sort.parse("roaster")))).items())
                 .as("the offset pagination keeps ordering on it, only a cursor needs to read the key back")

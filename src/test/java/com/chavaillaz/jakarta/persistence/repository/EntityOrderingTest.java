@@ -90,7 +90,7 @@ class EntityOrderingTest extends HibernateTest {
             RepositoryContext<CoffeeEntity> context = context(Map.of("name", "name"), BY_NAME);
             assertThatIllegalArgumentException()
                     .isThrownBy(() -> ordering().resolveProperty(context, "price"))
-                    .withMessage("Cannot sort or filter on the unknown property price");
+                    .withMessage("Cannot sort or filter on unknown property price");
         }
 
         @Test
@@ -106,7 +106,7 @@ class EntityOrderingTest extends HibernateTest {
             RepositoryContext<CoffeeEntity> context = context(Map.of("roaster", "roaster.name"), BY_NAME);
             assertThatIllegalArgumentException()
                     .isThrownBy(() -> ordering().resolveProperty(context, "notes.flavour"))
-                    .withMessage("Cannot sort or filter on the unknown property notes.flavour");
+                    .withMessage("Cannot sort or filter on unknown property notes.flavour");
         }
 
     }
@@ -141,7 +141,7 @@ class EntityOrderingTest extends HibernateTest {
         void rejectsAnUnknownAttribute() {
             assertThatIllegalArgumentException()
                     .isThrownBy(() -> ordering().resolvePath(openContext(), root, "caffeine"))
-                    .withMessageContaining("Cannot sort on the unknown property caffeine");
+                    .withMessageContaining("Cannot sort on unknown property caffeine");
         }
 
         @Test
@@ -149,7 +149,7 @@ class EntityOrderingTest extends HibernateTest {
         void rejectsACollection() {
             assertThatIllegalArgumentException()
                     .isThrownBy(() -> ordering().resolvePath(openContext(), root, "notes"))
-                    .withMessage("Cannot sort on the collection property notes");
+                    .withMessage("Cannot sort on collection property notes");
         }
 
         @ParameterizedTest
@@ -158,7 +158,7 @@ class EntityOrderingTest extends HibernateTest {
         void rejectsAPropertyBehindABasicAttribute(String property) {
             assertThatIllegalArgumentException()
                     .isThrownBy(() -> ordering().resolvePath(openContext(), root, property))
-                    .withMessageContaining("Cannot sort on the unknown property " + property);
+                    .withMessageContaining("Cannot sort on unknown property " + property);
         }
 
     }

@@ -113,7 +113,7 @@ class AttributePathsTest extends HibernateTest {
     void rejectsAnUnreadableAttribute() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> AttributePaths.read(coffee(GEISHA), "caffeine"))
-                .withMessageContaining("Cannot read the attribute caffeine");
+                .withMessageContaining("Cannot read attribute caffeine");
     }
 
 }
