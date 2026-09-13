@@ -269,7 +269,7 @@ public class EntityOrdering<E> {
                 throw new IllegalArgumentException("Cannot sort on the unknown property " + property, e);
             }
             if (path.getModel() instanceof PluralAttribute) {
-                // Ordering on a to-many association duplicates the rows and is rejected by the distinct queries
+                // Ordering on a to-many association would join it, duplicating the entity once per child
                 throw new IllegalArgumentException("Cannot sort on the collection property " + property);
             }
         }

@@ -426,8 +426,8 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * <p>
      * The restriction carries the reusable scope of the repository, the criteria what is specific to a single
      * lookup. Both are combined with the seek predicate of the cursor, so a page can never escape the scope it was
-     * issued within. A restriction or a criteria joining a collection is automatically made distinct, so that a
-     * duplicated boundary row does not silently shorten the page.
+     * issued within. A restriction or a criteria joining a collection is moved into a correlated {@code exists}
+     * subquery, so that a duplicated boundary row does not silently shorten the page.
      *
      * @param restriction The restriction to apply, {@code null} or {@link Restriction#unrestricted()} to match all
      * @param criteria    The additional criteria to apply, or {@code null}
@@ -729,7 +729,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * <p>
      * Override to sort on business attributes; the identifier is appended automatically (see {@link Sort}), so it
      * does not need to be added here. The returned paths must belong to the root entity, a path on a joined
-     * collection being incompatible with the distinct queries.
+     * collection duplicating the entity once per child.
      * <p>
      * Unlike a requested ordering, which the repository resolves itself, a default ordering on a nested property
      * is built here with the raw criteria API: {@code root.get("roaster").get("name")} is an implicit inner join

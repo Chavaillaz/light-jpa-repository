@@ -145,7 +145,7 @@ class EntityOrderingTest extends HibernateTest {
         }
 
         @Test
-        @DisplayName("rejects a collection, which the distinct queries cannot order on")
+        @DisplayName("rejects a collection, whose join would duplicate the entity once per child")
         void rejectsACollection() {
             assertThatIllegalArgumentException()
                     .isThrownBy(() -> ordering().resolvePath(openContext(), root, "notes"))
