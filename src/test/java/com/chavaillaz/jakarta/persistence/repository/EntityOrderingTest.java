@@ -1,6 +1,7 @@
 package com.chavaillaz.jakarta.persistence.repository;
 
 import static java.util.Collections.emptyMap;
+import static java.util.Collections.nCopies;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
@@ -227,6 +228,59 @@ class EntityOrderingTest extends HibernateTest {
             assertThatIllegalArgumentException()
                     .isThrownBy(() -> ordering().resolveSort(context, Sort.NONE))
                     .withMessageContaining("Cursor pagination requires an ordering on plain attributes");
+        }
+
+    }
+
+    @Nested
+    @DisplayName("building the ordering of a query")
+    class BuildOrders {
+
+        private Root<CoffeeEntity> root;
+
+        @BeforeEach
+        void createRoot() {
+            CriteriaBuilder builder = entityManager.getCriteriaBuilder();
+            root = builder.createQuery(CoffeeEntity.class).from(CoffeeEntity.class);
+        }
+
+        private List<String> namesOf(List<Order> orders) {
+            return orders.stream()
+                    .map(order -> (order.isAscending() ? "" : "-") + EntityOrdering.nameOf(order.getExpression()))
+                    .toList();
+        }
+
+        @Test
+        @DisplayName("compares a property once, the first criterion naming it winning")
+        void comparesAPropertyOnce() {
+            assertThat(namesOf(ordering().buildOrders(openContext(), root, Sort.parse("name,name,-name"))))
+                    .containsExactly("name", "id");
+            assertThat(namesOf(ordering().buildOrders(openContext(), root, Sort.parse("-price,name,price"))))
+                    .containsExactly("-price", "name", "id");
+        }
+
+        @Test
+        @DisplayName("collapses two public properties aliasing the very same attribute")
+        void collapsesTwoAliasesOfTheSameAttribute() {
+            RepositoryContext<CoffeeEntity> context = context(Map.of("brewer", "roaster.name", "roaster", "roaster.name"), BY_NAME);
+
+            assertThat(namesOf(ordering().buildOrders(context, root, Sort.parse("brewer,roaster"))))
+                    .containsExactly("roaster.name", "id");
+        }
+
+        @Test
+        @DisplayName("does not append the identifier twice when it is already ordered on")
+        void doesNotDuplicateTheIdentifier() {
+            assertThat(namesOf(ordering().buildOrders(openContext(), root, Sort.parse("-id"))))
+                    .containsExactly("-id");
+        }
+
+        @Test
+        @DisplayName("keeps the ordering a repeated property cannot grow, the criteria coming from the consumers")
+        void staysBoundedWhateverTheConsumerRepeats() {
+            Sort repeated = Sort.parse(String.join(",", nCopies(200, "name")));
+
+            assertThat(ordering().buildOrders(openContext(), root, repeated)).hasSize(2);
         }
 
     }

@@ -1,7 +1,6 @@
 package com.chavaillaz.jakarta.persistence.repository;
 
 import static java.util.Comparator.comparing;
-import static java.util.stream.Collectors.toSet;
 
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
@@ -15,7 +14,6 @@ import jakarta.persistence.metamodel.EntityType;
 import jakarta.persistence.metamodel.PluralAttribute;
 import jakarta.persistence.metamodel.SingularAttribute;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -144,6 +142,12 @@ public class EntityOrdering<E> {
      * Builds the ordering of a query, made of the requested criteria, or of the default ones when none is
      * requested, followed by the identifier of the entity so that the resulting ordering is always unique and thus
      * stable.
+     * <p>
+     * An expression is only compared once, the first criterion reaching it winning, exactly as
+     * {@link #resolveSort(RepositoryContext, Sort)} keeps a property once: a second comparison cannot discriminate
+     * two rows the first one already left equal. The ordering comes from the API consumers, so without it a
+     * {@code sort=name,name,name,...} grows the {@code ORDER BY} clause of every query as far as the consumer
+     * cares to repeat itself, and two public properties aliasing the same attribute silently compare it twice.
      *
      * @param context The repository the query is written for
      * @param root    The root entity of the query
@@ -154,18 +158,31 @@ public class EntityOrdering<E> {
     public List<Order> buildOrders(RepositoryContext<E> context, Root<E> root, @Nullable Sort sort) {
         CriteriaBuilder criteriaBuilder = context.entityManager().getCriteriaBuilder();
 
-        List<Order> orders = new ArrayList<>(sort == null || sort.isEmpty()
-                ? context.defaultOrders(criteriaBuilder, root)
-                : sort.criteria().stream().map(criterion -> toOrder(context, criteriaBuilder, root, criterion)).toList());
+        // Keyed by the expression the criterion resolves to, so that the first one comparing it wins and the
+        // insertion order, which is the order of precedence, is preserved
+        Map<Expression<?>, Order> orders = new LinkedHashMap<>();
+        if (sort == null || sort.isEmpty()) {
+            context.defaultOrders(criteriaBuilder, root).forEach(order -> keep(orders, order));
+        } else {
+            sort.criteria().forEach(criterion -> keep(orders, toOrder(context, criteriaBuilder, root, criterion)));
+        }
 
         // The identifier is only appended when it is not already part of the ordering, so that a repository
         // ordering on it explicitly, in descending order for instance, is not overridden
-        Set<Expression<?>> ordered = orders.stream().map(Order::getExpression).collect(toSet());
         getIdPaths(context, root)
-                .filter(path -> !ordered.contains(path))
                 .map(criteriaBuilder::asc)
-                .forEach(orders::add);
-        return orders;
+                .forEach(order -> keep(orders, order));
+        return List.copyOf(orders.values());
+    }
+
+    /**
+     * Keeps an ordering unless the query already compares its expression.
+     *
+     * @param orders The orderings resolved so far, keyed by the expression they compare
+     * @param order  The ordering to keep
+     */
+    private static void keep(Map<Expression<?>, Order> orders, Order order) {
+        orders.putIfAbsent(order.getExpression(), order);
     }
 
     /**
