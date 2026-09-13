@@ -15,6 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.function.Function;
 
@@ -99,6 +100,22 @@ class CoffeeCursorTest extends HibernateTest {
         assertThat(names).containsExactly(BLUE_MOUNTAIN, BOURBON_POINTU, GEISHA);
         assertThat(statistics().getPrepareStatementCount())
                 .as("the third item is on the second page of two, the third page was never fetched")
+                .isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("fetches only the pages an iterator pulls, and not the whole walk on the first item")
+    void streamsLazilyThroughAnIterator() {
+        statistics().clear();
+
+        List<String> names = withRepository(repository -> {
+            Iterator<CoffeeEntity> coffees = repository.streamAll(Sort.NONE, 2).iterator();
+            return List.of(coffees.next().getName(), coffees.next().getName(), coffees.next().getName());
+        });
+
+        assertThat(names).containsExactly(BLUE_MOUNTAIN, BOURBON_POINTU, GEISHA);
+        assertThat(statistics().getPrepareStatementCount())
+                .as("the third item is on the second page of two, the two following pages were never fetched")
                 .isEqualTo(2);
     }
 

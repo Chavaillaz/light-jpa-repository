@@ -3,6 +3,7 @@ package com.chavaillaz.jakarta.persistence.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
@@ -256,6 +257,24 @@ class CursorsTest {
 
             assertThat(walked).hasSize(2);
             assertThat(fetched).as("requesting the same page again would restart the walk from the first one").hasValue(1);
+        }
+
+        @Test
+        @DisplayName("fetches only the pages an iterator pulls, rather than buffering the whole walk")
+        void fetchesOnlyThePagesAnIteratorPulls() {
+            AtomicInteger fetched = new AtomicInteger();
+
+            Iterator<Bean> iterator = Cursors.stream(cursor -> {
+                int page = fetched.incrementAndGet();
+                return page(BEANS.subList(0, 2), page < 3 ? "more" : null);
+            }, SORT, 2).iterator();
+
+            assertThat(iterator.next()).isEqualTo(BEANS.getFirst());
+            assertThat(fetched).as("a flat mapped walk pushes all three pages into the buffer of its iterator").hasValue(1);
+
+            iterator.next();
+            iterator.next();
+            assertThat(fetched).as("the third item is the first one of the second page").hasValue(2);
         }
 
     }

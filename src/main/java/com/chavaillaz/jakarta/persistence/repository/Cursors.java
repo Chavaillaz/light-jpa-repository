@@ -7,11 +7,15 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HexFormat;
+import java.util.Iterator;
 import java.util.List;
-import java.util.Objects;
+import java.util.Spliterator;
+import java.util.Spliterators;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import org.jspecify.annotations.Nullable;
 
@@ -162,9 +166,10 @@ public final class Cursors {
      * result set at once.
      * <p>
      * The pages are fetched on demand as the stream is consumed, so a short-circuiting operation such as
-     * {@link Stream#limit(long)} or {@link Stream#findFirst()} fetches only the pages it actually needs. Only the
-     * fetching is lazy though, not the retention: the entities walked stay managed by the persistence context
-     * until the transaction ends, and the stream must be consumed within that very same transaction.
+     * {@link Stream#limit(long)} or {@link Stream#findFirst()} fetches only the pages it actually needs, and so
+     * does an {@link Stream#iterator() iterator} pulling the items one at a time. Only the fetching is lazy
+     * though, not the retention: the entities walked stay managed by the persistence context until the
+     * transaction ends, and the stream must be consumed within that very same transaction.
      *
      * @param <T>      The type of the returned items
      * @param pages    The page fetcher, which is the cursor query being walked
@@ -173,30 +178,63 @@ public final class Cursors {
      * @return The lazy stream of every matching item, in the requested ordering
      */
     public static <T> Stream<T> stream(Function<Cursor, CursorResult<T>> pages, Sort sort, int pageSize) {
-        // The whole walk hangs off a single element, so that not even the first page is fetched before the stream
-        // is consumed: Stream.iterate evaluates its seed eagerly, which would query on the mere call
-        return Stream.of(Cursor.first(pageSize, sort))
-                .flatMap(first -> Stream.iterate(pages.apply(first), Objects::nonNull, page -> following(pages, page, sort, pageSize)))
-                .flatMap(page -> page.items().stream());
+        // A spliterator of its own rather than a flat mapped iteration of the pages: flatMap only stays lazy for a
+        // short-circuiting terminal operation, and pushes the whole inner iteration, every page of it, into a
+        // buffer as soon as the stream is pulled through its iterator or its spliterator instead
+        return StreamSupport.stream(new PageWalk<>(pages, sort, pageSize), false);
     }
 
     /**
-     * Fetches the page following the given one, or {@code null} when the walk is over.
+     * Walk of the pages of a cursor query, fetching a page only once every item of the previous one was handed
+     * over, whether the stream is consumed by a terminal operation or pulled through its iterator.
      *
-     * @param <T>      The type of the returned items
-     * @param pages    The page fetcher, which is the cursor query being walked
-     * @param page     The page the walk has reached
-     * @param sort     The requested ordering
-     * @param pageSize The number of items fetched per underlying page
-     * @return The following page, or {@code null} when the given one is the last
+     * @param <T> The type of the returned items
      */
-    private static <T> @Nullable CursorResult<T> following(Function<Cursor, CursorResult<T>> pages, CursorResult<T> page, Sort sort, int pageSize) {
-        // The token is what makes the walk progress: a page announcing a successor without handing one over would
-        // otherwise be requested as a first page again, and the walk would never terminate
-        if (!page.hasNext() || page.next() == null) {
+    private static final class PageWalk<T> extends Spliterators.AbstractSpliterator<T> {
+
+        private final Function<Cursor, CursorResult<T>> pages;
+        private final Sort sort;
+        private final int pageSize;
+
+        /**
+         * The request of the page to fetch once the items at hand are exhausted, {@code null} when the walk is
+         * over. Nothing is fetched on construction, so that a stream nobody consumes issues no query at all.
+         */
+        private @Nullable Cursor following;
+
+        private Iterator<T> items = Collections.emptyIterator();
+
+        private PageWalk(Function<Cursor, CursorResult<T>> pages, Sort sort, int pageSize) {
+            super(Long.MAX_VALUE, ORDERED | NONNULL);
+            this.pages = pages;
+            this.sort = sort;
+            this.pageSize = pageSize;
+            this.following = Cursor.first(pageSize, sort);
+        }
+
+        @Override
+        public boolean tryAdvance(Consumer<? super T> action) {
+            while (!items.hasNext()) {
+                if (following == null) {
+                    return false;
+                }
+                CursorResult<T> page = pages.apply(following);
+                items = page.items().iterator();
+                // The token is what makes the walk progress: a page announcing a successor without handing one
+                // over would otherwise be requested as a first page again, and the walk would never terminate
+                following = page.hasNext() && page.next() != null ? Cursor.of(page.next(), pageSize, sort) : null;
+            }
+            action.accept(items.next());
+            return true;
+        }
+
+        @Override
+        public @Nullable Spliterator<T> trySplit() {
+            // The pages are fetched through an entity manager, which is neither thread safe nor usable outside the
+            // thread of its transaction: a split would have another thread pull the following items, and query
             return null;
         }
-        return pages.apply(Cursor.of(page.next(), pageSize, sort));
+
     }
 
     /**
