@@ -12,9 +12,7 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.From;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
-import jakarta.persistence.criteria.Selection;
 import jakarta.persistence.criteria.Subquery;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -501,7 +499,6 @@ public class EntityQueries<E> {
 
         CursorPosition position = Cursors.position(context.cursorCodec(), cursor, resolvedSort);
         Sort direction = Cursors.direction(resolvedSort, position);
-        List<String> keyProperties = resolvedSort.criteria().stream().map(SortCriterion::property).toList();
 
         CriteriaBuilder criteriaBuilder = context.entityManager().getCriteriaBuilder();
         CriteriaQuery<Tuple> query = criteriaBuilder.createTupleQuery();
@@ -519,7 +516,7 @@ public class EntityQueries<E> {
             query.where(predicate);
         }
 
-        selectKeysAlongside(query, root, keyProperties);
+        Keysets.selectAlongside(query, root, resolvedSort);
         query.orderBy(Keysets.toOrders(criteriaBuilder, root, direction));
 
         List<Tuple> rows = context.entityManager().createQuery(query)
@@ -529,48 +526,10 @@ public class EntityQueries<E> {
         return Cursors.toResult(
                 context.cursorCodec(),
                 rows.stream().map(row -> row.get(0, entityType)).toList(),
-                rows.stream().<Supplier<List<String>>>map(row -> () -> keysOf(context, row, keyProperties)).toList(),
+                rows.stream().<Supplier<List<String>>>map(row -> () -> Keysets.selectedValuesOf(row, resolvedSort, context.cursorKeyCodec())).toList(),
                 cursor,
                 resolvedSort,
                 position);
-    }
-
-    /**
-     * Selects the entity alongside the very columns the ordering compares, so that the keys travelling within the
-     * tokens are the values the database ordered on, and not what an accessor of the entity happens to return for
-     * them.
-     * <p>
-     * The entity occupies the first element of each row, the keys following it in the ordering order, which is
-     * what {@link #keysOf(RepositoryContext, Tuple, List)} reads them back with.
-     *
-     * @param query      The cursor query being built
-     * @param root       The root entity of the query
-     * @param properties The ordering properties, in the order they are compared in
-     */
-    protected void selectKeysAlongside(CriteriaQuery<Tuple> query, Root<E> root, List<String> properties) {
-        List<Selection<?>> selections = new ArrayList<>(properties.size() + 1);
-        selections.add(root);
-        properties.forEach(property -> selections.add(AttributePaths.path(root, property)));
-        query.multiselect(selections);
-    }
-
-    /**
-     * Formats the ordering keys the query returned alongside an entity into their textual representation.
-     *
-     * @param context    The repository the query is written for
-     * @param row        The fetched row, whose first element is the entity and whose others are the keys
-     * @param properties The ordering properties, in the order they were selected in
-     * @return The textual keys, in the ordering order
-     * @throws IllegalArgumentException if one of the keys is {@code null}, a nullable attribute being unusable as
-     *                                  a cursor key since the databases do not agree on where the nulls sort
-     */
-    protected List<String> keysOf(RepositoryContext<E> context, Tuple row, List<String> properties) {
-        List<String> keys = new ArrayList<>(properties.size());
-        for (int index = 0; index < properties.size(); index++) {
-            // The entity occupies the first element, the keys following it in the ordering order
-            keys.add(context.cursorKeyCodec().format(properties.get(index), row.get(index + 1)));
-        }
-        return keys;
     }
 
 }

@@ -14,6 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.Tuple;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Order;
@@ -88,6 +89,21 @@ class KeysetsTest extends HibernateTest {
 
         assertThat(Keysets.valuesOf(coffee, Sort.parse("name,price,strength,roast,roaster.country"), CursorKeyCodec.DEFAULT))
                 .containsExactly(GEISHA, "80.00", "3", "LIGHT", "France");
+    }
+
+    @Test
+    @DisplayName("reads the ordering keys selected alongside the entity, following the nested paths")
+    void readsTheSelectedKeys() {
+        runInTransaction(Coffees::persistMenu);
+        CriteriaQuery<Tuple> tuples = builder.createTupleQuery();
+        Root<CoffeeEntity> coffees = tuples.from(CoffeeEntity.class);
+        Sort sort = Sort.parse("roaster.country,name");
+
+        Keysets.selectAlongside(tuples, coffees, sort);
+        Tuple row = entityManager.createQuery(tuples.where(builder.equal(coffees.get(CoffeeEntity_.name), GEISHA))).getSingleResult();
+
+        assertThat(row.get(0, CoffeeEntity.class).getName()).isEqualTo(GEISHA);
+        assertThat(Keysets.selectedValuesOf(row, sort, CursorKeyCodec.DEFAULT)).containsExactly("France", GEISHA);
     }
 
     @Test

@@ -1,12 +1,16 @@
 package com.chavaillaz.jakarta.persistence.repository;
 
+import jakarta.persistence.Tuple;
 import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.From;
 import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Selection;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.IntStream;
 
 /**
  * Keyset helpers shared by the query collaborators, building the {@code ORDER BY} clause, the seek predicate and
@@ -81,11 +85,51 @@ public final class Keysets {
     }
 
     /**
+     * Selects the entity alongside the very columns the ordering compares, so that the keys travelling within the
+     * tokens are the values the database ordered on, and not what an accessor of the entity happens to return for
+     * them.
+     * <p>
+     * The entity occupies the first element of each row, the keys following it in the ordering order, which is
+     * what {@link #selectedValuesOf(Tuple, Sort, CursorKeyCodec)} reads them back with.
+     *
+     * @param query The cursor query being built
+     * @param root  The root entity of the query
+     * @param sort  The resolved ordering, whose keys are selected in the order they are compared in
+     */
+    public static void selectAlongside(CriteriaQuery<Tuple> query, From<?, ?> root, Sort sort) {
+        List<Selection<?>> selections = new ArrayList<>(sort.criteria().size() + 1);
+        selections.add(root);
+        sort.criteria().forEach(criterion -> selections.add(AttributePaths.path(root, criterion.property())));
+        query.multiselect(selections);
+    }
+
+    /**
+     * Formats the ordering keys a cursor query returned alongside an entity, which become the position of the
+     * cursor.
+     *
+     * @param row   The fetched row, whose first element is the entity and whose others are the keys
+     * @param sort  The resolved ordering the keys were selected for
+     * @param codec The codec formatting each key into its textual representation
+     * @return The textual keys, in the ordering order
+     * @throws IllegalArgumentException if one of the keys is {@code null}, a nullable attribute being unusable as
+     *                                  a cursor key since the databases do not agree on where the nulls sort
+     * @see #selectAlongside(CriteriaQuery, From, Sort)
+     */
+    public static List<String> selectedValuesOf(Tuple row, Sort sort, CursorKeyCodec codec) {
+        List<SortCriterion> criteria = sort.criteria();
+        // The entity occupies the first element, the keys following it in the ordering order
+        return IntStream.range(0, criteria.size())
+                .mapToObj(index -> codec.format(criteria.get(index).property(), row.get(index + 1)))
+                .toList();
+    }
+
+    /**
      * Reads the ordering keys of the given entity, which become the position of the cursor.
      * <p>
-     * This is the fallback of the cursor queries, which select the keys alongside the entity so that the token
-     * carries the values the database ordered on: an accessor is free to return something else than the column
-     * it maps, and the seek predicate would then be expressed in terms the {@code order by} clause never used.
+     * This is the fallback of a query selecting the entity alone, a cursor query selecting its keys
+     * {@link #selectAlongside(CriteriaQuery, From, Sort) alongside} the entity so that the token carries the values
+     * the database ordered on: an accessor is free to return something else than the column it maps, and the seek
+     * predicate would then be expressed in terms the {@code order by} clause never used.
      *
      * @param entity The entity of the boundary row of the page
      * @param sort   The resolved ordering
