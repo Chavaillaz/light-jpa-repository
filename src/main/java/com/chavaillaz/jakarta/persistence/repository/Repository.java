@@ -109,14 +109,9 @@ public interface Repository<E extends Identifiable<I>, I> {
     /**
      * Gets the entity from its identifier, holding the requested lock on its row.
      * <p>
-     * The row is locked as it is read, which is what a read-modify-write needs: with
-     * {@link LockModeType#PESSIMISTIC_WRITE}, a concurrent transaction reaching the same row waits until this one
-     * ends, instead of overwriting the change afterwards.
-     * <p>
-     * The lock only guarantees the freshness of the state when the entity is not already managed by the
-     * persistence context: when it is, the provider locks the row but keeps the copy it already holds, which may
-     * predate a change another transaction has since committed. Use {@link #lock(Identifiable, LockModeType)} to
-     * lock and refresh such an entity.
+     * The row is locked as it is read, which is what a read-modify-write needs. The state is only guaranteed
+     * fresh when the entity is not managed yet: otherwise, the provider locks the row but keeps the copy it
+     * already holds, which {@link #lock(Identifiable, LockModeType)} refreshes.
      *
      * @param id       The entity identifier, {@code null} never matching any entity
      * @param lockMode The lock to hold on the row until the end of the transaction
@@ -194,23 +189,20 @@ public interface Repository<E extends Identifiable<I>, I> {
      * Lazily walks all the existing entities of the current repository, fetching a page at a time through
      * {@link #findAll(Cursor)} instead of loading the whole result set at once.
      * <p>
-     * The pages are fetched on demand as the stream is consumed, so a short-circuiting operation such as
-     * {@link Stream#limit(long)} or {@link Stream#findFirst()} fetches only the pages it actually needs. The
-     * stream must be consumed within the very same transaction it was obtained from: like
-     * {@link jakarta.persistence.Query#getResultStream()}, it keeps querying the persistence context as it is
-     * pulled from, so it cannot be returned from a transactional method and consumed afterward — collect it
-     * eagerly beforehand if the caller needs to do that.
+     * A short-circuiting operation such as {@link Stream#limit(long)} only fetches the pages it needs. The stream
+     * keeps querying as it is pulled, like {@link jakarta.persistence.Query#getResultStream()}, so it must be
+     * consumed within the transaction it was obtained from: collect it beforehand to return it from a
+     * transactional method.
      * <p>
-     * Only the fetching is lazy, not the retention: every entity walked stays managed by the persistence context
-     * until the transaction ends, so walking a whole large table still grows the heap as loading it at once
-     * would. Clear the persistence context periodically, or walk the table with a stateless session, when the
-     * point of the walk is to avoid holding the rows in memory rather than to avoid a single huge query.
+     * Only the fetching is lazy, not the retention: every entity walked stays managed until the transaction ends.
+     * Clear the persistence context periodically, or walk the table with a stateless session, when the rows must
+     * not be held in memory.
      *
      * @param sort     The requested ordering, {@link Sort#NONE} to apply the default ordering of the repository
      * @param pageSize The number of items fetched per underlying page, capped to {@link Cursor#MAX_SIZE}
      * @return The lazy stream of every matching entity, in the requested ordering
      * @throws IllegalArgumentException if the ordering is not usable as a cursor key, raised when the stream is
-     *                                  first consumed and not when it is obtained, nothing being queried until then
+     *                                  first consumed, nothing being queried until then
      * @see #findAll(Cursor)
      */
     default Stream<E> streamAll(Sort sort, int pageSize) {
@@ -257,10 +249,9 @@ public interface Repository<E extends Identifiable<I>, I> {
      * Configures the requested lock on an entity, its state being first refreshed from the database so that any
      * concurrent change is taken into account. Any local change is therefore discarded.
      * <p>
-     * A detached entity is re-attached beforehand, the lock then applying to the managed copy.
-     * <p>
-     * Unlike {@link #findById(Object, LockModeType)}, the state is always refreshed, so an entity the persistence
-     * context already holds cannot be locked on a stale copy.
+     * A detached entity is re-attached beforehand, the lock then applying to the managed copy. Unlike
+     * {@link #findById(Object, LockModeType)}, the state is always refreshed, so a managed entity cannot be locked
+     * on a stale copy.
      *
      * @param entity   The entity to lock
      * @param lockMode The lock to hold on the row until the end of the transaction
@@ -330,9 +321,8 @@ public interface Repository<E extends Identifiable<I>, I> {
     /**
      * Deletes the given entity.
      * <p>
-     * A detached entity is re-attached beforehand, with a fresh lookup rather than a merge, so that deleting it
-     * cannot silently persist local field edits carried by a stale detached copy first. Its version is still
-     * checked as a merge would check it, so that a stale copy cannot delete a row another transaction changed.
+     * A detached entity is re-attached with a fresh lookup rather than a merge, so that its local changes are
+     * never written, and its version is checked as a merge would check it.
      *
      * @param entity The entity to delete
      * @throws IllegalArgumentException if the entity is transient, having no identifier yet
@@ -354,9 +344,8 @@ public interface Repository<E extends Identifiable<I>, I> {
     /**
      * Deletes the entities with the given identifiers, silently skipping the ones that do not exist.
      * <p>
-     * The entities are loaded first, so that the deletion cascades and runs the callbacks exactly as
-     * {@link #delete(Identifiable)} does. A repository needing the single statement of a bulk deletion, and
-     * accepting that it does neither, exposes its own method built on {@code deleteAll(Restriction)}.
+     * The entities are loaded first, so that the deletion cascades and runs the callbacks as
+     * {@link #delete(Identifiable)} does, which a bulk deletion built on {@code deleteAll(Restriction)} does not.
      *
      * @param ids The identifiers of the entities to delete
      * @see #findAllById(Collection)

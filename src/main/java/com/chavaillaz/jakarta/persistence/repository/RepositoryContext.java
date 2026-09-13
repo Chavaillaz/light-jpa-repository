@@ -11,10 +11,8 @@ import java.util.Map;
  * Everything a query needs from the repository it is written for: the entity manager it runs on, the ordering
  * rules it follows and the codecs its cursor tokens are issued with.
  * <p>
- * The query collaborators are shared per entity type rather than built per repository, so nothing of a given
- * repository may be held by them: an entity manager is bound to a transaction, and the hooks belong to whichever
- * repository is asking. Both are therefore handed over at each call, through this contract, which the repository
- * implements without exposing its hooks to its own callers.
+ * The query collaborators are shared per entity type, so they hold nothing of a repository: this context is handed
+ * over at each call instead, without exposing the hooks of the repository to its own callers.
  *
  * @param <E> The type of the managed entity
  * @see AbstractRepository#context()

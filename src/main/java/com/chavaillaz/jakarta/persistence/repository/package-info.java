@@ -1,37 +1,25 @@
 /**
  * Building blocks the {@link com.chavaillaz.jakarta.persistence.repository.AbstractRepository JPA repository
- * base class} composes its queries from, so that each concern stays isolated and testable on its own.
+ * base class} composes its queries from.
  * <p>
  * {@link com.chavaillaz.jakarta.persistence.repository.Pageable} and
  * {@link com.chavaillaz.jakarta.persistence.repository.Cursor} carry the two pagination requests a repository
- * accepts, {@link com.chavaillaz.jakarta.persistence.repository.Sort} the ordering shared by both; none of the
- * three depends on Hibernate or needs a live persistence context, so they stay usable and testable on their own.
- * {@link com.chavaillaz.jakarta.persistence.repository.SortCriterion} additionally accepts attributes of the JPA
- * static metamodel instead of a plain property name, so that a rename of the underlying attribute fails the build
- * instead of silently misbehaving at runtime; that overload alone needs a persistence unit mapping the entity to
- * have already been bootstrapped once, since that is what populates the generated metamodel fields it reads.
+ * accepts, and {@link com.chavaillaz.jakarta.persistence.repository.Sort} the ordering shared by both, none of them
+ * depending on Hibernate. {@link com.chavaillaz.jakarta.persistence.repository.SortCriterion} also accepts
+ * attributes of the JPA static metamodel, so that a rename of the attribute fails the build.
  * <p>
  * {@link com.chavaillaz.jakarta.persistence.repository.EntityOrdering} and
- * {@link com.chavaillaz.jakarta.persistence.repository.EntityQueries} are the actual plumbing, translating the
- * requests above into JPA criteria queries; they are considered implementation details of
- * {@code AbstractRepository} rather than a public API, and are documented for the maintainers of this package
- * rather than for the authors of a repository, who are only expected to use the {@code protected} methods
- * {@code AbstractRepository} exposes. Dynamic RSQL filtering is not part of this package: it is an optional
- * extension provided by the sibling {@code rsql-jpa-repository} artifact, built on top of the same collaborators.
+ * {@link com.chavaillaz.jakarta.persistence.repository.EntityQueries} translate these requests into criteria
+ * queries, naming the attributes through {@link com.chavaillaz.jakarta.persistence.repository.AttributePaths} and
+ * building the clauses of the cursor pagination with {@link com.chavaillaz.jakarta.persistence.repository.Keysets}.
+ * They are implementation details of {@code AbstractRepository}, whose {@code protected} methods are what a
+ * repository is written with, and what the RSQL filtering of the sibling {@code rsql-jpa-repository} artifact is
+ * built on.
  * <p>
- * Naming an attribute by its dotted path, such as {@code roaster.name}, is the concern of
- * {@link com.chavaillaz.jakarta.persistence.repository.AttributePaths}, which every ordering resolves through,
- * whichever pagination asks for it, so that a nested path is walked, joined and read back exactly the same way
- * everywhere.
- * <p>
- * The keyset (cursor) pagination additionally relies on {@link com.chavaillaz.jakarta.persistence.repository.Keysets}
- * to build the seek predicate and the {@code ORDER BY} clause from a resolved ordering, and on
- * {@link com.chavaillaz.jakarta.persistence.repository.CursorCodec} to turn the boundary keys into the opaque
- * token exposed to the API consumers, {@link com.chavaillaz.jakarta.persistence.repository.Base64CursorCodec}
- * being the default, overridable implementation. The formatting and parsing of a single key of that position, at
- * the attribute type level, is delegated to {@link com.chavaillaz.jakarta.persistence.repository.CursorKeyCodec},
- * an independent extension point defaulting to {@link com.chavaillaz.jakarta.persistence.repository.CursorValues},
- * which covers the attribute types supported out of the box.
+ * A cursor token is encoded by a {@link com.chavaillaz.jakarta.persistence.repository.CursorCodec},
+ * {@link com.chavaillaz.jakarta.persistence.repository.Base64CursorCodec} by default, and each of its keys by a
+ * {@link com.chavaillaz.jakarta.persistence.repository.CursorKeyCodec}, whose default delegates to
+ * {@link com.chavaillaz.jakarta.persistence.repository.CursorValues}; both are overridable per repository.
  * <p>
  * The package is {@link org.jspecify.annotations.NullMarked}: every type is non-null unless explicitly annotated
  * {@link org.jspecify.annotations.Nullable}.
