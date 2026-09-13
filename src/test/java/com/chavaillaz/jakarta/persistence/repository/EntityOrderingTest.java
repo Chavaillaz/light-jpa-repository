@@ -20,6 +20,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.chavaillaz.jakarta.persistence.repository.example.BeanBatchEntity;
 import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity;
@@ -148,6 +150,15 @@ class EntityOrderingTest extends HibernateTest {
             assertThatIllegalArgumentException()
                     .isThrownBy(() -> ordering().resolvePath(openContext(), root, "notes"))
                     .withMessage("Cannot sort on the collection property notes");
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"name.length", "price.scale", "roastedAt.nano"})
+        @DisplayName("rejects a property dereferencing a basic attribute, which Path#get raises an IllegalStateException for")
+        void rejectsAPropertyBehindABasicAttribute(String property) {
+            assertThatIllegalArgumentException()
+                    .isThrownBy(() -> ordering().resolvePath(openContext(), root, property))
+                    .withMessageContaining("Cannot sort on the unknown property " + property);
         }
 
     }

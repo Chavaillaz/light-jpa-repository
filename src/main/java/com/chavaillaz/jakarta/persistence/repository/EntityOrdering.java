@@ -261,7 +261,11 @@ public class EntityOrdering<E> {
                 // A nested property navigates its association with a left join, so that an entity whose
                 // association is null keeps being returned and counted, see AttributePaths#step
                 path = AttributePaths.step(path, attributes[index], index < attributes.length - 1);
-            } catch (IllegalArgumentException e) {
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                // Both are caught because that is what the contract of Path#get raises: an unknown attribute is an
+                // IllegalArgumentException, while dereferencing one that is already terminal, which a property such
+                // as name.length is, is an IllegalStateException. The property comes from the API consumers, so the
+                // second one must not escape as the runtime failure it would otherwise be
                 throw new IllegalArgumentException("Cannot sort on the unknown property " + property, e);
             }
             if (path.getModel() instanceof PluralAttribute) {

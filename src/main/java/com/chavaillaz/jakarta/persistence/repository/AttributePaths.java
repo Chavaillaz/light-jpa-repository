@@ -104,6 +104,8 @@ public final class AttributePaths {
      *                     navigated rather than read
      * @return The corresponding path, a join for an intermediate association or embeddable
      * @throws IllegalArgumentException if the attribute does not exist on the parent path
+     * @throws IllegalStateException    if the parent path is a basic attribute, which has nothing to dereference,
+     *                                  both being what the contract of {@link Path#get(String)} raises
      */
     static Path<?> step(Path<?> parent, String attribute, boolean intermediate) {
         Path<?> path = parent.get(attribute);
