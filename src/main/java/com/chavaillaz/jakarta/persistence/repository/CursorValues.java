@@ -38,6 +38,13 @@ public final class CursorValues {
      */
     private static final int NANOS_PER_MILLISECOND = 1_000_000;
 
+    /**
+     * Largest scale a decimal key may carry either way, the 131 072 digits the widest database numeric type holds
+     * before its decimal point: a token is untrusted input, and an exponent such as {@code 1E+999999999} would
+     * otherwise reach a driver expanding it into as many digits, spending minutes and gigabytes on a single key.
+     */
+    private static final int MAX_DECIMAL_SCALE = 131_072;
+
     private static final Map<Class<?>, Function<String, Object>> PARSERS = Map.ofEntries(
             Map.entry(String.class, value -> value),
             Map.entry(Boolean.class, CursorValues::parseBoolean),
@@ -48,7 +55,7 @@ public final class CursorValues {
             Map.entry(Long.class, Long::valueOf),
             Map.entry(Float.class, Float::valueOf),
             Map.entry(Double.class, Double::valueOf),
-            Map.entry(BigDecimal.class, BigDecimal::new),
+            Map.entry(BigDecimal.class, CursorValues::parseDecimal),
             Map.entry(BigInteger.class, BigInteger::new),
             Map.entry(UUID.class, UUID::fromString),
             Map.entry(Instant.class, Instant::parse),
@@ -79,13 +86,15 @@ public final class CursorValues {
      *                 cursor key
      * @return The corresponding textual representation
      * @throws IllegalArgumentException if the value is {@code null}, if its type cannot be {@link #parse parsed
-     *                                  back}, or if a date carries a precision finer than the millisecond
+     *                                  back}, if a date carries a precision finer than the millisecond, or if a
+     *                                  decimal carries a scale beyond the largest one a key may
      */
     public static String format(String property, @Nullable Object value) {
         return switch (value) {
             case null -> throw new IllegalArgumentException("Cannot build a cursor on null property %s: a cursor key must be non nullable".formatted(property));
             case Enum<?> constant -> constant.name();
             case Date date -> Long.toString(epochMillis(property, date));
+            case BigDecimal decimal -> boundedScale(property, decimal).toString();
             default -> parsable(property, value).toString();
         };
     }
@@ -108,6 +117,23 @@ public final class CursorValues {
             throw new IllegalArgumentException("Cannot build a cursor on property %s: timestamp %s is finer than the millisecond a date key travels as".formatted(property, timestamp));
         }
         return date.getTime();
+    }
+
+    /**
+     * Checks that a decimal key carries a scale its parser reads back, {@link #MAX_DECIMAL_SCALE} at most either
+     * way, so that such a key is refused while the token is still being built rather than once the consumer sends
+     * it back.
+     *
+     * @param property The property the value belongs to, used to name it in the error message
+     * @param decimal  The decimal to check
+     * @return The very same decimal
+     * @throws IllegalArgumentException if the scale of the decimal is beyond the largest one a key may carry
+     */
+    private static BigDecimal boundedScale(String property, BigDecimal decimal) {
+        if (Math.abs((long) decimal.scale()) > MAX_DECIMAL_SCALE) {
+            throw new IllegalArgumentException("Cannot build a cursor on property %s: decimal %s has a scale beyond %d".formatted(property, decimal, MAX_DECIMAL_SCALE));
+        }
+        return decimal;
     }
 
     /**
@@ -177,6 +203,15 @@ public final class CursorValues {
             throw new IllegalArgumentException("Expected a single character, got " + value.length());
         }
         return value.charAt(0);
+    }
+
+    private static BigDecimal parseDecimal(String value) {
+        BigDecimal decimal = new BigDecimal(value);
+        if (Math.abs((long) decimal.scale()) > MAX_DECIMAL_SCALE) {
+            // Refused before a driver expands such an exponent into as many digits to bind it
+            throw new IllegalArgumentException("Expected a scale of at most %d either way, got %d".formatted(MAX_DECIMAL_SCALE, decimal.scale()));
+        }
+        return decimal;
     }
 
 }

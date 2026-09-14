@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.chavaillaz.jakarta.persistence.repository.example.Roast;
 
@@ -148,6 +149,30 @@ class CursorValuesTest {
                 .isThrownBy(() -> CursorValues.parse("not-a-number", Integer.class))
                 .withMessageContaining("Invalid cursor key value not-a-number")
                 .withCauseInstanceOf(NumberFormatException.class);
+    }
+
+    @ParameterizedTest(name = "{0} is refused")
+    @ValueSource(strings = {"1E+999999999", "1E-999999999", "-5E+131073"})
+    @DisplayName("rejects a decimal key whose exponent no database holds, rather than binding it for a driver to expand")
+    void rejectsAnExcessiveExponent(String value) {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> CursorValues.parse(value, BigDecimal.class))
+                .withMessageContaining("Invalid cursor key value " + value);
+    }
+
+    @Test
+    @DisplayName("parses a decimal key up to the largest scale a database holds, either way")
+    void parsesTheWidestDecimal() {
+        assertThat(CursorValues.parse("1E+131072", BigDecimal.class)).isEqualTo(new BigDecimal("1E+131072"));
+        assertThat(CursorValues.parse("1E-131072", BigDecimal.class)).isEqualTo(new BigDecimal("1E-131072"));
+    }
+
+    @Test
+    @DisplayName("rejects formatting a decimal key its own parser would refuse")
+    void rejectsFormattingAnExcessiveDecimal() {
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> CursorValues.format("price", new BigDecimal("1E+131073")))
+                .withMessage("Cannot build a cursor on property price: decimal 1E+131073 has a scale beyond 131072");
     }
 
     @Test

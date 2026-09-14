@@ -317,6 +317,21 @@ class CoffeeCursorTest extends HibernateTest {
     }
 
     @Test
+    @DisplayName("rejects a forged decimal key as a malformed cursor, before a driver expands its exponent")
+    void rejectsAForgedDecimalExponent() {
+        Sort sort = Sort.parse("price");
+        String forged = CursorCodec.DEFAULT.encode(new CursorPosition(List.of("1E+999999999", "1"), false, Cursors.fingerprint(Sort.parse("price,id"))));
+        statistics().clear();
+
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> page(forged, 3, sort))
+                .withMessageContaining("Invalid cursor key value 1E+999999999");
+        assertThat(statistics().getPrepareStatementCount())
+                .as("the key never reaches the driver")
+                .isZero();
+    }
+
+    @Test
     @DisplayName("rejects a nullable attribute as a cursor key, before a single row is read")
     void rejectsANullableKey() {
         assertThatIllegalArgumentException()
