@@ -1,13 +1,19 @@
 package com.chavaillaz.jakarta.persistence.repository;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.junit.jupiter.params.provider.Arguments.arguments;
 
+import java.util.Base64;
 import java.util.List;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 @DisplayName("Base64CursorCodec")
@@ -56,6 +62,41 @@ class Base64CursorCodecTest {
         CursorPosition position = new CursorPosition(List.of(value, "second"), false, "cafe");
 
         assertThat(codec.decode(codec.encode(position))).isEqualTo(position);
+    }
+
+    @ParameterizedTest(name = "a key holding {0} survives the encoding")
+    @MethodSource("unpairedSurrogates")
+    @DisplayName("encodes the code units of a key holding an unpaired surrogate, which UTF-8 would alter")
+    void encodesAnUnpairedSurrogate(String description, String value) {
+        CursorPosition position = new CursorPosition(List.of(value, "second"), false, "cafe");
+
+        assertThat(codec.decode(codec.encode(position))).isEqualTo(position);
+    }
+
+    static Stream<Arguments> unpairedSurrogates() {
+        return Stream.of(
+                arguments("the first half of an emoji", "Café \uD83D"),
+                arguments("the second half of an emoji", "\uDE00 Crème"),
+                arguments("both halves in the wrong order", "\uDE00\uD83D"));
+    }
+
+    @Test
+    @DisplayName("keeps encoding a key UTF-8 carries as UTF-8, so that the tokens already issued stay readable")
+    void keepsEncodingAsUtf8() {
+        Base64.Encoder base64 = Base64.getUrlEncoder().withoutPadding();
+        String issued = base64.encodeToString(("fcafe|" + base64.encodeToString("Café 😀".getBytes(UTF_8))).getBytes(UTF_8));
+
+        assertThat(codec.encode(new CursorPosition(List.of("Café 😀"), false, "cafe"))).isEqualTo(issued);
+    }
+
+    @Test
+    @DisplayName("rejects a key ending in the middle of a code unit")
+    void rejectsATruncatedCodeUnit() {
+        String forged = Base64CursorCodec.encodeValue("fcafe|~" + Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[]{0x00, 0x43, (byte) 0xD8}));
+
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> codec.decode(forged))
+                .withMessage("Malformed cursor");
     }
 
     @Test

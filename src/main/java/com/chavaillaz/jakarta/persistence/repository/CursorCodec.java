@@ -19,8 +19,9 @@ public interface CursorCodec {
      * request the surrounding page.
      * <p>
      * The token must travel as a query parameter without escaping, and survive the round trip verbatim whatever
-     * the keys hold, the empty string and the separators of the format included. The encoding must be
-     * deterministic, and tell apart the directions and the orderings a position is issued for.
+     * the keys hold, the empty string and the separators of the format included, as well as an unpaired surrogate,
+     * which UTF-8 cannot carry. The encoding must be deterministic, and tell apart the directions and the orderings
+     * a position is issued for.
      *
      * @param position The position to encode, made of the ordering keys of the boundary row, of the direction of
      *                 the navigation and of the fingerprint of the ordering

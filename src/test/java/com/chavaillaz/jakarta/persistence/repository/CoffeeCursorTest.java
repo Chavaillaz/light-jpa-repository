@@ -233,6 +233,21 @@ class CoffeeCursorTest extends HibernateTest {
     }
 
     @Test
+    @DisplayName("walks past a key holding an unpaired surrogate, instead of fetching the same page forever")
+    void walksPastAnUnpairedSurrogate() {
+        // Names cut in the middle of an emoji, which a token carrying them as a question mark would seek before
+        persist(coffee("Café \uD83D"), coffee("Café \uD83D"), coffee("Café \uD83D"));
+
+        List<Long> walked = withRepository(repository ->
+                repository.streamAll(Sort.NONE, 2).limit(MENU.size() + 4).map(CoffeeEntity::getId).toList());
+
+        assertThat(walked)
+                .as("every coffee is walked once, the limit only stopping a walk that would never end")
+                .hasSize(MENU.size() + 3)
+                .doesNotHaveDuplicates();
+    }
+
+    @Test
     @DisplayName("leaves a way back when the rows following the position are deleted in between")
     void leavesAWayBackFromAnEmptiedPage() {
         CursorResult<CoffeeEntity> first = page(null, 3, Sort.NONE);
