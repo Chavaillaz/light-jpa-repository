@@ -83,21 +83,22 @@ public final class Keysets {
      * Selects the root entity followed by the keys of the ordering, so that a token carries the values the
      * database ordered on rather than what the accessors of the entity return.
      *
-     * @param query The cursor query being built
-     * @param root  The root entity of the query, selected first
-     * @param sort  The resolved ordering, whose keys follow the entity in the ordering order
+     * @param criteriaBuilder The builder to use
+     * @param query           The cursor query being built
+     * @param root            The root entity of the query, selected first
+     * @param sort            The resolved ordering, whose keys follow the entity in the ordering order
      * @see #selectedValuesOf(Tuple, Sort, CursorKeyCodec)
      */
-    public static void selectAlongside(CriteriaQuery<Tuple> query, From<?, ?> root, Sort sort) {
+    public static void selectAlongside(CriteriaBuilder criteriaBuilder, CriteriaQuery<Tuple> query, From<?, ?> root, Sort sort) {
         List<Selection<?>> selections = new ArrayList<>(sort.criteria().size() + 1);
         selections.add(root);
         sort.criteria().forEach(criterion -> selections.add(AttributePaths.path(root, criterion.property())));
-        query.multiselect(selections);
+        query.select(criteriaBuilder.tuple(selections));
     }
 
     /**
-     * Formats the ordering keys a row {@link #selectAlongside(CriteriaQuery, From, Sort) selected} after its entity,
-     * which become the position of the cursor.
+     * Formats the ordering keys a row {@link #selectAlongside(CriteriaBuilder, CriteriaQuery, From, Sort) selected}
+     * after its entity, which become the position of the cursor.
      *
      * @param row   The fetched row, whose first element is the entity and whose others are the keys
      * @param sort  The resolved ordering the keys were selected for
@@ -116,8 +117,9 @@ public final class Keysets {
      * Reads the ordering keys of the given entity, which become the position of the cursor, for a query selecting
      * the entity alone.
      * <p>
-     * Prefer {@link #selectAlongside(CriteriaQuery, From, Sort) selecting the keys}: an accessor is free to return
-     * something else than the column it maps, and the token would then carry a key the database never ordered on.
+     * Prefer {@link #selectAlongside(CriteriaBuilder, CriteriaQuery, From, Sort) selecting the keys}: an accessor is
+     * free to return something else than the column it maps, and the token would then carry a key the database never
+     * ordered on.
      *
      * @param entity The entity of the boundary row of the page
      * @param sort   The resolved ordering

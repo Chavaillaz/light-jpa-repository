@@ -467,7 +467,7 @@ public class EntityQueries<E> {
             query.where(predicate);
         }
 
-        Keysets.selectAlongside(query, root, resolvedSort);
+        Keysets.selectAlongside(criteriaBuilder, query, root, resolvedSort);
         query.orderBy(Keysets.toOrders(criteriaBuilder, root, direction));
 
         List<Tuple> rows = context.entityManager()

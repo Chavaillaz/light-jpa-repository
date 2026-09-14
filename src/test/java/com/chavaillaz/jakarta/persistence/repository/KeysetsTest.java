@@ -99,7 +99,7 @@ class KeysetsTest extends HibernateTest {
         Root<CoffeeEntity> coffees = tuples.from(CoffeeEntity.class);
         Sort sort = Sort.parse("roaster.country,name");
 
-        Keysets.selectAlongside(tuples, coffees, sort);
+        Keysets.selectAlongside(builder, tuples, coffees, sort);
         Tuple row = entityManager.createQuery(tuples.where(builder.equal(coffees.get(CoffeeEntity_.name), GEISHA))).getSingleResult();
 
         assertThat(row.get(0, CoffeeEntity.class).getName()).isEqualTo(GEISHA);
