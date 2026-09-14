@@ -123,16 +123,19 @@ public class EntityQueries<E> {
     }
 
     /**
-     * Checks if the given root joins what may match several rows per entity, directly or through another join: a
-     * to-many association, or a join following no association at all, such as an entity join. The entity is
-     * otherwise duplicated in the results once per matching row, which also breaks the pagination and the count.
+     * Checks if the given root joins what may match several rows per entity, directly or through another join or a
+     * treat: a to-many association, or a join following no association at all, such as an entity join. The entity
+     * is otherwise duplicated in the results once per matching row, which also breaks the pagination and the count.
      *
      * @param from The root or join to inspect
      * @return {@code true} if the joins may produce duplicated rows, {@code false} otherwise
      */
     protected static boolean hasCollectionJoin(From<?, ?> from) {
-        // Read from the Hibernate query tree, since From#getJoins leaves out every join but the attribute ones
-        return ((SqmFrom<?, ?>) from).getSqmJoins().stream().anyMatch(EntityQueries::multipliesRows);
+        // Read from the Hibernate query tree, since From#getJoins leaves out every join but the attribute ones, and
+        // a join made through a treat belongs to that treat rather than to the from it downcasts
+        SqmFrom<?, ?> sqmFrom = (SqmFrom<?, ?>) from;
+        return sqmFrom.getSqmJoins().stream().anyMatch(EntityQueries::multipliesRows)
+                || sqmFrom.getSqmTreats().stream().anyMatch(EntityQueries::hasCollectionJoin);
     }
 
     private static boolean multipliesRows(SqmJoin<?, ?> join) {
