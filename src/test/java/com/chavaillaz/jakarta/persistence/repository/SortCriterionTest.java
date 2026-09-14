@@ -22,6 +22,7 @@ class SortCriterionTest {
             "roaster.name,roaster.name,true",
             "_internal,_internal,true",
             "grade2,grade2,true",
+            "-région,région,false",
     })
     @DisplayName("parses a criterion")
     void parsesACriterion(String value, String property, boolean ascending) {
@@ -44,6 +45,7 @@ class SortCriterionTest {
             ".name",
             "name)",
             "-",
+            "name\u200B",
     })
     @DisplayName("rejects a property that is not a plain attribute path")
     void rejectsAnInvalidProperty(String value) {

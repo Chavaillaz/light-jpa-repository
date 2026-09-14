@@ -33,9 +33,11 @@ public record SortCriterion(
     public static final String NESTING_SEPARATOR = ".";
 
     /**
-     * Pattern of an accepted attribute name, restrictive on purpose as the value comes from the API consumers.
+     * Pattern of an accepted attribute name, a Java identifier whatever its letters, since a resolved ordering names
+     * the attributes of the entity, and restrictive on purpose otherwise, as the value comes from the API consumers:
+     * even the invisible characters a Java identifier ignores are refused.
      */
-    private static final Pattern ATTRIBUTE_PATTERN = Pattern.compile("[A-Za-z_]\\w*");
+    private static final Pattern ATTRIBUTE_PATTERN = Pattern.compile("\\p{javaJavaIdentifierStart}[\\p{javaJavaIdentifierPart}&&[^\\p{javaIdentifierIgnorable}]]*");
 
     /**
      * Compiled form of the {@link #NESTING_SEPARATOR}, quoted since the dot is a regex metacharacter.

@@ -27,6 +27,7 @@ import com.chavaillaz.jakarta.persistence.repository.example.BeanBatchEntity;
 import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity;
 import com.chavaillaz.jakarta.persistence.repository.example.RoasterEntity;
 import com.chavaillaz.jakarta.persistence.repository.example.TastingNoteEntity;
+import com.chavaillaz.jakarta.persistence.repository.example.TerroirEntity;
 
 @DisplayName("EntityOrdering")
 class EntityOrderingTest extends HibernateTest {
@@ -41,7 +42,7 @@ class EntityOrderingTest extends HibernateTest {
 
     @BeforeAll
     static void setupAll() {
-        setupSessionFactory(CoffeeEntity.class, RoasterEntity.class, TastingNoteEntity.class, BeanBatchEntity.class);
+        setupSessionFactory(CoffeeEntity.class, RoasterEntity.class, TastingNoteEntity.class, BeanBatchEntity.class, TerroirEntity.class);
     }
 
     @BeforeEach
@@ -228,6 +229,16 @@ class EntityOrderingTest extends HibernateTest {
 
             assertThat(EntityOrdering.of(BeanBatchEntity.class).resolveSort(context, Sort.NONE).toString())
                     .isEqualTo("id.batchNumber,id.roasterCode");
+        }
+
+        @Test
+        @DisplayName("resolves an attribute named with letters beyond ASCII, as a Java identifier may be")
+        void resolvesAnAttributeNamedBeyondAscii() {
+            RepositoryContext<TerroirEntity> context =
+                    new TestContext<>(entityManager, (builder, root) -> List.of(builder.asc(root.get("région"))), Map.of("region", "région"));
+
+            assertThat(EntityOrdering.of(TerroirEntity.class).resolveSort(context, Sort.NONE).toString()).isEqualTo("région,id");
+            assertThat(EntityOrdering.of(TerroirEntity.class).resolveSort(context, Sort.parse("-region")).toString()).isEqualTo("-région,id");
         }
 
         @Test
