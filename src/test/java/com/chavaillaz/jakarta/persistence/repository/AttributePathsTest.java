@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 
 import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity;
 import com.chavaillaz.jakarta.persistence.repository.example.CoffeeEntity_;
+import com.chavaillaz.jakarta.persistence.repository.example.GrinderEntity;
 import com.chavaillaz.jakarta.persistence.repository.example.RoasterEntity;
 import com.chavaillaz.jakarta.persistence.repository.example.TastingNoteEntity;
 
@@ -31,7 +32,7 @@ class AttributePathsTest extends HibernateTest {
 
     @BeforeAll
     static void setupAll() {
-        setupSessionFactory(CoffeeEntity.class, RoasterEntity.class, TastingNoteEntity.class);
+        setupSessionFactory(CoffeeEntity.class, RoasterEntity.class, TastingNoteEntity.class, GrinderEntity.class);
     }
 
     @BeforeEach
@@ -90,6 +91,17 @@ class AttributePathsTest extends HibernateTest {
                 .as("a left join next to the inner one cannot bring back the rows it dropped, it only joins twice")
                 .singleElement()
                 .satisfies(join -> assertThat(join.getJoinType()).isEqualTo(INNER));
+    }
+
+    @Test
+    @DisplayName("resolves the type of an attribute a generic superclass declares to the type argument of the entity")
+    void resolvesTheTypeOfAGenericAttribute() {
+        Root<GrinderEntity> grinders = entityManager.getCriteriaBuilder().createQuery(GrinderEntity.class).from(GrinderEntity.class);
+
+        assertThat(AttributePaths.javaTypeOf(AttributePaths.path(grinders, "id"))).isEqualTo(Long.class);
+        assertThat(AttributePaths.javaTypeOf(AttributePaths.path(root, "strength")))
+                .as("a primitive attribute is reported as its wrapper, as Path#getJavaType does")
+                .isEqualTo(Integer.class);
     }
 
     @Test

@@ -138,7 +138,7 @@ public final class Keysets {
     private static Predicate equal(CriteriaBuilder builder, From<?, ?> root, SortCriterion criterion, String value, CursorKeyCodec codec) {
         Path<?> path = AttributePaths.path(root, criterion.property());
         // equal accepts a plain Object, so no comparability is required here
-        return builder.equal(path, codec.parse(value, path.getJavaType()));
+        return builder.equal(path, codec.parse(value, AttributePaths.javaTypeOf(path)));
     }
 
     /**
@@ -160,7 +160,7 @@ public final class Keysets {
      */
     private static <Y extends Comparable<? super Y>> Predicate after(CriteriaBuilder builder, From<?, ?> root, SortCriterion criterion, String value, CursorKeyCodec codec) {
         Path<Y> path = AttributePaths.path(root, criterion.property());
-        Y bound = codec.parse(value, path.getJavaType());
+        Y bound = codec.parse(value, AttributePaths.javaTypeOf(path));
         return criterion.ascending() ? builder.greaterThan(path, bound) : builder.lessThan(path, bound);
     }
 

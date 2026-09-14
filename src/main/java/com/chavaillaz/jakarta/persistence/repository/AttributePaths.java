@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 import org.hibernate.Hibernate;
+import org.hibernate.query.sqm.tree.domain.SqmPath;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -113,6 +114,21 @@ public final class AttributePaths {
      */
     static String[] split(String property) {
         return NESTING_PATTERN.split(property);
+    }
+
+    /**
+     * Gets the Java type of the attribute a path reaches, which a cursor key is parsed back into.
+     * <p>
+     * {@link Path#getJavaType()} reports the erasure of an attribute a generic mapped superclass declares, such as
+     * the {@code Object} of the identifier of a {@code BaseEntity<K>}, whereas a key has to be bound as the type
+     * argument of the entity.
+     *
+     * @param <Y>  The type of the attribute
+     * @param path The path to the attribute
+     * @return The Java type of the attribute, a primitive one being reported as its wrapper
+     */
+    static <Y> Class<? extends Y> javaTypeOf(Path<Y> path) {
+        return ((SqmPath<Y>) path).getResolvedModel().getExpressibleJavaType().getJavaTypeClass();
     }
 
     /**
