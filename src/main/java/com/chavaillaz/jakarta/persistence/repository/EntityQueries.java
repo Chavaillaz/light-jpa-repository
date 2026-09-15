@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
+import org.hibernate.Session;
 import org.hibernate.query.SelectionQuery;
 import org.hibernate.query.restriction.Restriction;
 import org.hibernate.query.specification.SelectionSpecification;
@@ -147,6 +148,18 @@ public class EntityQueries<E> {
     }
 
     /**
+     * Unwraps the Hibernate session a {@link SelectionSpecification} creates its query with, rather than letting its
+     * {@code createQuery(EntityManager)} cast the entity manager, which fails on the proxy a container injects
+     * implementing nothing but the JPA interface, such as the transaction scoped entity manager of WildFly.
+     *
+     * @param context The repository the query is written for
+     * @return The session behind the entity manager of the repository
+     */
+    private static Session sessionOf(RepositoryContext<?> context) {
+        return context.entityManager().unwrap(Session.class);
+    }
+
+    /**
      * Builds the selection query matching the given restriction and additional criteria, ordered by the requested
      * criteria or by the default ones.
      *
@@ -172,7 +185,7 @@ public class EntityQueries<E> {
                     }
                     query.orderBy(ordering.buildOrders(context, root, sort));
                 })
-                .createQuery(context.entityManager());
+                .createQuery(sessionOf(context));
     }
 
     /**
@@ -313,7 +326,7 @@ public class EntityQueries<E> {
                                 .getIdPaths(context.entityManager(), root)
                                 .map(criteriaBuilder::asc)
                                 .toList()))
-                .createQuery(context.entityManager())
+                .createQuery(sessionOf(context))
                 .getResultList();
     }
 

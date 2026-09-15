@@ -5,6 +5,7 @@ import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.BLUE
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.ETHIOPIA;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.GEISHA;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.HARRAR;
+import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.PANAMA;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.SIDAMO;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.YIRGACHEFFE;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.namesOf;
@@ -15,9 +16,12 @@ import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
 import static org.hibernate.query.restriction.Restriction.equal;
 import static org.hibernate.query.restriction.Restriction.unrestricted;
 
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Root;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -56,6 +60,46 @@ class EntityQueriesTest extends HibernateTest {
     private <T> T withQueries(BiFunction<EntityQueries<CoffeeEntity>, RepositoryContext<CoffeeEntity>, T> action) {
         return inTransaction(entityManager ->
                 action.apply(EntityQueries.of(CoffeeEntity.class), new TestContext<>(entityManager, BY_NAME, Map.of())));
+    }
+
+    /**
+     * Runs the queries on the entity manager a container injects, such as the transaction scoped one of WildFly or
+     * the client proxy of a CDI producer: a proxy implementing nothing but the JPA interface, delegating every call,
+     * {@code unwrap} included, to the entity manager of the transaction.
+     */
+    private <T> T withContainerProxy(BiFunction<EntityQueries<CoffeeEntity>, RepositoryContext<CoffeeEntity>, T> action) {
+        return inTransaction(entityManager -> {
+            EntityManager proxy = (EntityManager) Proxy.newProxyInstance(
+                    EntityManager.class.getClassLoader(),
+                    new Class<?>[]{EntityManager.class},
+                    (instance, method, arguments) -> {
+                        try {
+                            return method.invoke(entityManager, arguments);
+                        } catch (InvocationTargetException e) {
+                            throw e.getCause();
+                        }
+                    });
+            return action.apply(EntityQueries.of(CoffeeEntity.class), new TestContext<>(proxy, BY_NAME, Map.of()));
+        });
+    }
+
+    @Test
+    @DisplayName("runs on the entity manager proxy a container injects, which is no Hibernate session")
+    void runsOnAContainerProxy() {
+        PaginationResult<CoffeeEntity> page = withContainerProxy((queries, context) -> queries.search(context, equal(CoffeeEntity_.origin, ETHIOPIA), null, Pageable.of(0, 2)));
+        assertThat(namesOf(page)).containsExactly(HARRAR, SIDAMO);
+        assertThat(page.totalItems()).isEqualTo(3);
+
+        assertThat((long) withContainerProxy((queries, context) -> queries.count(context, null, tasting("Citrus")))).isEqualTo(3);
+        assertThat((Optional<CoffeeEntity>) withContainerProxy((queries, context) -> queries.first(context, null, null, Sort.parse("-price"))))
+                .hasValueSatisfying(coffee -> assertThat(coffee.getName()).isEqualTo(GEISHA));
+
+        List<RoasterEntity> roasters = withContainerProxy((queries, context) -> queries.search(context, RoasterEntity.class, equal(RoasterEntity_.country, ETHIOPIA)));
+        assertThat(roasters).extracting(RoasterEntity::getName).containsExactly("Kaldi Roasting");
+
+        CursorResult<CoffeeEntity> scrolled = withContainerProxy((queries, context) -> queries.scroll(context, null, tasting("Citrus"), Cursor.first(2, Sort.NONE)));
+        assertThat(namesOf(scrolled)).containsExactly(GEISHA, SIDAMO);
+        assertThat((boolean) withContainerProxy((queries, context) -> queries.exists(context, equal(CoffeeEntity_.origin, PANAMA), null))).isTrue();
     }
 
     @Test
