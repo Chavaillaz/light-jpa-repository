@@ -175,6 +175,40 @@ class CursorValuesTest {
                 .withMessage("Cannot build a cursor on property price: decimal 1E+131073 has a scale beyond 131072");
     }
 
+    @ParameterizedTest(name = "a {0} key is refused")
+    @ValueSource(classes = {BigDecimal.class, BigInteger.class})
+    @DisplayName("rejects a number key longer than any database holds, rather than parsing it for the square of its length")
+    void rejectsAnExcessivelyLongNumber(Class<?> type) {
+        String value = "9".repeat(150_001);
+
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> CursorValues.parse(value, type))
+                .withMessageEndingWith("for type " + type.getName())
+                .havingCause()
+                .withMessage("Expected a number of at most 150000 characters, got 150001");
+    }
+
+    @Test
+    @DisplayName("parses a number key as long as the widest database numeric type holds")
+    void parsesTheLongestNumber() {
+        String widest = "9".repeat(131_072) + "." + "9".repeat(16_383);
+
+        assertThat(CursorValues.parse(widest, BigDecimal.class).precision()).isEqualTo(147_455);
+    }
+
+    @Test
+    @DisplayName("rejects formatting a number key its own parser would refuse")
+    void rejectsFormattingAnExcessivelyLongNumber() {
+        BigInteger tooLong = BigInteger.TEN.pow(150_000);
+
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> CursorValues.format("serial", tooLong))
+                .withMessage("Cannot build a cursor on property serial: number of 150001 characters is longer than 150000");
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> CursorValues.format("price", new BigDecimal(tooLong)))
+                .withMessage("Cannot build a cursor on property price: number of 150001 characters is longer than 150000");
+    }
+
     @Test
     @DisplayName("rejects an empty or multiple character value of a character key, rather than overflowing")
     void failsOnAnInvalidCharacter() {

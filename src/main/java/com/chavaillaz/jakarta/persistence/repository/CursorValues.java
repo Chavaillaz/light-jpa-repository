@@ -45,6 +45,14 @@ public final class CursorValues {
      */
     private static final int MAX_DECIMAL_SCALE = 131_072;
 
+    /**
+     * Longest text a decimal or integer key may be parsed from, room enough for the 131 072 digits the widest
+     * database numeric type holds before its decimal point, the 16 383 it holds after, a sign and an exponent:
+     * parsing a number takes the square of its length, and a forged key of a million digits would otherwise spend
+     * twenty seconds of processor time.
+     */
+    private static final int MAX_NUMBER_LENGTH = 150_000;
+
     private static final Map<Class<?>, Function<String, Object>> PARSERS = Map.ofEntries(
             Map.entry(String.class, value -> value),
             Map.entry(Boolean.class, CursorValues::parseBoolean),
@@ -56,7 +64,7 @@ public final class CursorValues {
             Map.entry(Float.class, Float::valueOf),
             Map.entry(Double.class, Double::valueOf),
             Map.entry(BigDecimal.class, CursorValues::parseDecimal),
-            Map.entry(BigInteger.class, BigInteger::new),
+            Map.entry(BigInteger.class, CursorValues::parseInteger),
             Map.entry(UUID.class, UUID::fromString),
             Map.entry(Instant.class, Instant::parse),
             Map.entry(LocalDate.class, LocalDate::parse),
@@ -86,15 +94,17 @@ public final class CursorValues {
      *                 cursor key
      * @return The corresponding textual representation
      * @throws IllegalArgumentException if the value is {@code null}, if its type cannot be {@link #parse parsed
-     *                                  back}, if a date carries a precision finer than the millisecond, or if a
-     *                                  decimal carries a scale beyond the largest one a key may
+     *                                  back}, if a date carries a precision finer than the millisecond, if a
+     *                                  decimal carries a scale beyond the largest one a key may, or if a number
+     *                                  is written longer than the longest one a key may
      */
     public static String format(String property, @Nullable Object value) {
         return switch (value) {
             case null -> throw new IllegalArgumentException("Cannot build a cursor on null property %s: a cursor key must be non nullable".formatted(property));
             case Enum<?> constant -> constant.name();
             case Date date -> Long.toString(epochMillis(property, date));
-            case BigDecimal decimal -> boundedScale(property, decimal).toString();
+            case BigDecimal decimal -> boundedLength(property, boundedScale(property, decimal).toString());
+            case BigInteger integer -> boundedLength(property, integer.toString());
             default -> parsable(property, value).toString();
         };
     }
@@ -134,6 +144,23 @@ public final class CursorValues {
             throw new IllegalArgumentException("Cannot build a cursor on property %s: decimal %s has a scale beyond %d".formatted(property, decimal, MAX_DECIMAL_SCALE));
         }
         return decimal;
+    }
+
+    /**
+     * Checks that a decimal or integer key is written in a text its parser reads back, {@link #MAX_NUMBER_LENGTH}
+     * characters at most, so that such a key is refused while the token is still being built rather than once the
+     * consumer sends it back.
+     *
+     * @param property The property the value belongs to, used to name it in the error message
+     * @param number   The textual representation of the number to check
+     * @return The very same textual representation
+     * @throws IllegalArgumentException if the text is longer than the longest one a key may carry
+     */
+    private static String boundedLength(String property, String number) {
+        if (number.length() > MAX_NUMBER_LENGTH) {
+            throw new IllegalArgumentException("Cannot build a cursor on property %s: number of %d characters is longer than %d".formatted(property, number.length(), MAX_NUMBER_LENGTH));
+        }
+        return number;
     }
 
     /**
@@ -206,12 +233,25 @@ public final class CursorValues {
     }
 
     private static BigDecimal parseDecimal(String value) {
+        requireParsableLength(value);
         BigDecimal decimal = new BigDecimal(value);
         if (Math.abs((long) decimal.scale()) > MAX_DECIMAL_SCALE) {
             // Refused before a driver expands such an exponent into as many digits to bind it
             throw new IllegalArgumentException("Expected a scale of at most %d either way, got %d".formatted(MAX_DECIMAL_SCALE, decimal.scale()));
         }
         return decimal;
+    }
+
+    private static BigInteger parseInteger(String value) {
+        requireParsableLength(value);
+        return new BigInteger(value);
+    }
+
+    private static void requireParsableLength(String number) {
+        if (number.length() > MAX_NUMBER_LENGTH) {
+            // Refused before the parser spends the square of the length on it
+            throw new IllegalArgumentException("Expected a number of at most %d characters, got %d".formatted(MAX_NUMBER_LENGTH, number.length()));
+        }
     }
 
 }
