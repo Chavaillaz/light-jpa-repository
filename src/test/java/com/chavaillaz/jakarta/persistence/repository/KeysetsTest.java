@@ -10,8 +10,10 @@ import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.YIRG
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.coffee;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.namesOf;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.roaster;
+import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Tuple;
@@ -164,6 +166,25 @@ class KeysetsTest extends HibernateTest {
         assertThat(namesOf(found))
                 .as("everything strictly after (MEDIUM, 6) in that ordering")
                 .containsExactly(BLUE_MOUNTAIN);
+    }
+
+    @Test
+    @DisplayName("bounds the leading key on its own, which an index scan can start from where a disjunction cannot")
+    void boundsTheLeadingKey() {
+        Map<String, CoffeeEntity> menu = inTransaction(Coffees::persistMenu);
+        recordStatements();
+
+        Predicate seek = Keysets.seek(builder, root, Sort.parse("-price,name,id"),
+                List.of("42.00", BLUE_MOUNTAIN, String.valueOf(menu.get(BLUE_MOUNTAIN).getId())), CursorKeyCodec.DEFAULT);
+        query.where(seek).orderBy(Keysets.toOrders(builder, root, Sort.parse("-price,name,id")));
+
+        assertThat(namesOf(entityManager.createQuery(query).getResultList()))
+                .as("the bound is implied by the lexicographic comparison, so it keeps the very same rows")
+                .containsExactly(KONA, YIRGACHEFFE, SIDAMO, HARRAR);
+        assertThat(statements())
+                .singleElement(as(STRING))
+                .as("the price is descending, so the rows after the boundary one cost at most its price")
+                .contains("price<=?");
     }
 
     @Test

@@ -18,8 +18,9 @@ import java.util.stream.IntStream;
  * the attribute paths being resolved by {@link AttributePaths}.
  * <p>
  * The seek predicate is the lexicographic comparison of the ordering keys, emitted as a disjunction of
- * conjunctions, each one adding the equality of one more leading key:
- * <pre>(k1 &gt; v1) OR (k1 = v1 AND k2 &lt; v2) OR (k1 = v1 AND k2 = v2 AND id &gt; v3)</pre>
+ * conjunctions, each one adding the equality of one more leading key, behind a redundant bound on the leading key
+ * that an index scan can start from:
+ * <pre>k1 &gt;= v1 AND ((k1 &gt; v1) OR (k1 = v1 AND k2 &lt; v2) OR (k1 = v1 AND k2 = v2 AND id &gt; v3))</pre>
  * A row value comparison {@code (k1, k2, id) > (v1, v2, v3)} would be shorter, but the criteria API cannot express
  * it, not every database supports it, and it requires every key to share the same direction.
  */
@@ -82,7 +83,14 @@ public final class Keysets {
             conjunction.add(bounds.get(index).after(criteriaBuilder));
             disjunction.add(criteriaBuilder.and(conjunction.toArray(Predicate[]::new)));
         }
-        return criteriaBuilder.or(disjunction.toArray(Predicate[]::new));
+
+        Predicate seek = criteriaBuilder.or(disjunction.toArray(Predicate[]::new));
+        if (bounds.size() == 1) {
+            return seek;
+        }
+        // Implied by every conjunction, but most databases start no index scan from a disjunction: without it, each page
+        // reads every row ordered before its boundary one
+        return criteriaBuilder.and(bounds.getFirst().atOrAfter(criteriaBuilder), seek);
     }
 
     /**
@@ -190,6 +198,17 @@ public final class Keysets {
          */
         Predicate after(CriteriaBuilder builder) {
             return ascending ? builder.greaterThan(path, value) : builder.lessThan(path, value);
+        }
+
+        /**
+         * Builds the inclusive comparison of the ordering key against the key of the boundary row, in the direction
+         * of the criterion.
+         *
+         * @param builder The builder to use
+         * @return The corresponding predicate
+         */
+        Predicate atOrAfter(CriteriaBuilder builder) {
+            return ascending ? builder.greaterThanOrEqualTo(path, value) : builder.lessThanOrEqualTo(path, value);
         }
 
     }
