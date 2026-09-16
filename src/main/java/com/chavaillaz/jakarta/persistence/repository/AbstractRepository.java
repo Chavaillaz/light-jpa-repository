@@ -835,8 +835,8 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     }
 
     /**
-     * Saves the given entities, flushing and clearing the persistence context every {@value #DEFAULT_SAVE_BATCH_SIZE}
-     * entities.
+     * Saves the given entities, flushing the persistence context and detaching the saved entities every
+     * {@value #DEFAULT_SAVE_BATCH_SIZE} entities.
      *
      * @param entities The entities to save
      * @return The number of saved entities
@@ -847,19 +847,21 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
     }
 
     /**
-     * Saves the given entities, flushing and clearing the persistence context every {@code batchSize}
-     * entities, for the bulk loads a plain {@link #saveAll(Collection)} cannot hold in memory.
+     * Saves the given entities, flushing the persistence context and detaching the saved entities every
+     * {@code batchSize} entities, for the bulk loads a plain {@link #saveAll(Collection)} cannot hold in memory.
      * <p>
-     * Each flush dirty checks every entity the persistence context holds, so saving without clearing costs the
+     * Each flush dirty checks every entity the persistence context holds, so saving without detaching costs the
      * square of the number of entities; by batches, both the memory and that cost stay bounded, and
      * {@code hibernate.jdbc.batch_size} can group the statements when set to match {@code batchSize}, save the
      * inserts of an entity whose identifier an identity column generates, which Hibernate sends one at a time to
      * read that identifier back.
      * <p>
-     * Clearing detaches <em>every</em> entity of the persistence context, not only the saved ones, and the
-     * generated identifiers are the only state guaranteed on the given entities: call this from a method owning its
-     * transaction and holding nothing else. Only the number of saved entities is returned, a detached entity being
-     * merged into a copy the caller never held, which is what holding a batch of would defeat.
+     * Only the saved entities leave the persistence context, with the entities their detach cascade reaches, so the
+     * ones the caller already holds stay managed, except the instance a saved detached copy is merged into. An entity
+     * the saved ones reference without cascading stays managed too, so a load referencing a distinct entity per row
+     * still accumulates them. The generated identifiers are the only state guaranteed on the given entities, and
+     * only the number of saved entities is returned, returning the copies a merge makes being what holding a batch
+     * of would defeat.
      *
      * @param entities  The entities to save
      * @param batchSize The number of entities saved between two flushes, which must be strictly positive
@@ -871,23 +873,36 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
             throw new IllegalArgumentException("The batch size must be strictly positive, got %d".formatted(batchSize));
         }
 
+        // The managed instances, which a merge returns in place of the given entity; sized on the collection too, a
+        // batch size standing for a single flush being free to exceed any array
+        List<E> batch = new ArrayList<>(min(batchSize, entities.size()));
         int saved = 0;
         for (E entity : entities) {
-            save(entity);
-            if (++saved % batchSize == 0) {
-                flushAndClear();
+            batch.add(save(entity));
+            if (batch.size() == batchSize) {
+                saved += flushAndDetach(batch);
             }
         }
         // The trailing partial batch, if any
-        if (saved % batchSize != 0) {
-            flushAndClear();
-        }
-        return saved;
+        return saved + flushAndDetach(batch);
     }
 
-    private void flushAndClear() {
+    /**
+     * Flushes the persistence context, then detaches the given saved entities, every other entity it holds staying
+     * managed.
+     *
+     * @param batch The managed instances of the saved entities, emptied once detached
+     * @return The number of entities saved in the batch
+     */
+    private int flushAndDetach(List<E> batch) {
+        if (batch.isEmpty()) {
+            return 0;
+        }
         entityManager.flush();
-        entityManager.clear();
+        batch.forEach(entityManager::detach);
+        int saved = batch.size();
+        batch.clear();
+        return saved;
     }
 
     @Override

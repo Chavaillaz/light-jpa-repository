@@ -20,6 +20,7 @@ import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import org.hibernate.Session;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -206,6 +207,32 @@ class CoffeeBulkTest extends HibernateTest {
 
             assertThat(saved).isZero();
             assertThat(remainingCount()).isEqualTo(7);
+        }
+
+        @Test
+        @DisplayName("detaches only the saved entities, leaving the ones the caller holds managed")
+        void detachesOnlyTheSavedEntities() {
+            List<CoffeeEntity> menu = withRepository(repository -> repository.findAll());
+            CoffeeEntity stale = menu.getLast();
+            stale.setStrength(1);
+            List<CoffeeEntity> batch = Stream.concat(IntStream.range(0, 7).mapToObj(index -> coffee("Held " + index)), Stream.of(stale))
+                    .toList();
+
+            runInTransaction(entityManager -> {
+                CoffeeRepositoryJpa repository = new CoffeeRepositoryJpa(entityManager);
+                CoffeeEntity held = repository.getById(menu.getFirst().getId());
+
+                repository.saveAllInBatches(batch, 3);
+
+                assertThat(entityManager.contains(held)).as("the entity loaded beforehand stays managed").isTrue();
+                assertThat(entityManager.unwrap(Session.class).getStatistics().getEntityCount())
+                        .as("the saved entities and the copy a merge made are all detached")
+                        .isEqualTo(1);
+                held.setStrength(9);
+            });
+
+            int strength = withRepository(repository -> repository.getById(menu.getFirst().getId()).getStrength());
+            assertThat(strength).as("a change made after the batches to the entity still managed is written").isEqualTo(9);
         }
 
         @Test

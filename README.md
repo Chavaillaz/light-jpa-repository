@@ -399,12 +399,14 @@ context. Use `deleteAll(entities)` or `deleteAllById(ids)` when any of that matt
 and delete them one by one, exactly as `delete` does. A bulk deletion also has no `from` clause to join, so
 restrict on the attributes of the entity itself, or use a subquery.
 
-`saveAllInBatches(entities)` is for the bulk loads a plain `saveAll` cannot hold in memory: it flushes and clears
-the persistence context every `batchSize` entities (defaulting to 50, or pass an explicit `saveAllInBatches(entities,
-batchSize)`), which keeps both the memory and the dirty checking bounded, and lets `hibernate.jdbc.batch_size` group
-the statements, save the inserts of an entity whose identifier an identity column generates, which Hibernate sends one
-at a time to read that identifier back. Clearing detaches **every** entity of the persistence context, not only the
-saved ones, so call it from a method that holds nothing else.
+`saveAllInBatches(entities)` is for the bulk loads a plain `saveAll` cannot hold in memory: it flushes the persistence
+context and detaches the saved entities every `batchSize` entities (defaulting to 50, or pass an explicit
+`saveAllInBatches(entities, batchSize)`), which keeps both the memory and the dirty checking bounded, and lets
+`hibernate.jdbc.batch_size` group the statements, save the inserts of an entity whose identifier an identity column
+generates, which Hibernate sends one at a time to read that identifier back. The entities you already hold stay
+managed, unless a saved entity is a detached copy of one of them or reaches one through a detach cascade; an entity
+the saved ones reference without cascading stays managed as well, so a load referencing a distinct entity per row
+still accumulates them.
 
 ## Locking
 
