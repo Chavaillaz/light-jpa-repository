@@ -88,6 +88,8 @@ public final class Cursors {
      * @param position     The requested position, or {@code null} for the first page
      * @param keyCodec     The codec formatting the ordering keys of the boundary rows into the tokens
      * @return The corresponding page, with the tokens of the surrounding ones
+     * @throws IllegalStateException if the page would issue the very position it was requested with, which only a
+     *                               key reading back as another value than the one written brings about
      * @see Keysets#valuesOf(Object, Sort, CursorKeyCodec)
      */
     public static <T> CursorResult<T> toResult(CursorCodec codec, List<T> fetched, Cursor cursor, Sort resolvedSort, @Nullable CursorPosition position, CursorKeyCodec keyCodec) {
@@ -113,6 +115,8 @@ public final class Cursors {
      * @param resolvedSort The resolved ordering the tokens are issued for
      * @param position     The requested position, or {@code null} for the first page
      * @return The corresponding page, with the tokens of the surrounding ones
+     * @throws IllegalStateException if the page would issue the very position it was requested with, which only a
+     *                               key reading back as another value than the one written brings about
      */
     public static <T> CursorResult<T> toResult(CursorCodec codec, List<T> fetched, List<Supplier<List<String>>> keys, Cursor cursor, Sort resolvedSort, @Nullable CursorPosition position) {
         boolean backward = isBackward(position);
@@ -141,13 +145,22 @@ public final class Cursors {
         // A backward walk comes from the following page, which therefore exists
         boolean hasNext = backward || hasMore;
         boolean hasPrevious = backward ? hasMore : position != null;
-        String fingerprint = fingerprint(resolvedSort);
+        List<String> nextKeys = hasNext ? boundaries.getLast().get() : null;
+        List<String> previousKeys = hasPrevious ? boundaries.getFirst().get() : null;
 
+        if (position != null && position.values().equals(backward ? previousKeys : nextKeys)) {
+            // The identifier ends every ordering, so these are the keys of the boundary row itself, which the seek
+            // predicate excludes: it only came back through keys that do not read back as they were written, and the
+            // page would issue the very token it was requested with, forever
+            throw new IllegalStateException("The cursor cannot advance past its boundary row, whose ordering keys do not read back as they were written");
+        }
+
+        String fingerprint = fingerprint(resolvedSort);
         return new CursorResult<>(
                 items,
                 cursor.size(),
-                hasNext ? token(codec, boundaries.getLast().get(), false, fingerprint) : null,
-                hasPrevious ? token(codec, boundaries.getFirst().get(), true, fingerprint) : null,
+                nextKeys != null ? token(codec, nextKeys, false, fingerprint) : null,
+                previousKeys != null ? token(codec, previousKeys, true, fingerprint) : null,
                 hasNext,
                 hasPrevious);
     }

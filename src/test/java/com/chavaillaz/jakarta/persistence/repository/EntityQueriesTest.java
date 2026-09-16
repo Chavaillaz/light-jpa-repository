@@ -12,6 +12,7 @@ import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.name
 import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
 import static org.hibernate.query.restriction.Restriction.equal;
 import static org.hibernate.query.restriction.Restriction.unrestricted;
@@ -28,6 +29,7 @@ import java.util.Optional;
 import java.util.function.BiFunction;
 
 import org.hibernate.query.restriction.Restriction;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -206,6 +208,35 @@ class EntityQueriesTest extends HibernateTest {
         assertThat(withQueries((queries, context) -> queries.search(context, null, null, Pageable.of(0, 2, Sort.parse("roaster")))).items())
                 .as("the offset pagination keeps ordering on it, only a cursor needs to read the key back")
                 .hasSize(2);
+    }
+
+    @Test
+    @DisplayName("refuses to walk on keys that do not read back as written, rather than walking the same page forever")
+    void refusesKeysThatDoNotReadBack() {
+        // Writes every strength of the menu as zero, which reads back as a position before each of them
+        CursorKeyCodec lossy = new CursorKeyCodec() {
+
+            @Override
+            public String format(String property, @Nullable Object value) {
+                return value instanceof Integer strength ? String.valueOf(strength - strength % 10) : CursorKeyCodec.DEFAULT.format(property, value);
+            }
+
+            @Override
+            public <Y> Y parse(String value, Class<Y> type) {
+                return CursorKeyCodec.DEFAULT.parse(value, type);
+            }
+
+        };
+
+        // Bounded, so that the walk fails the test rather than hangs it should it ever loop again
+        assertThatIllegalStateException()
+                .isThrownBy(() -> runInTransaction(entityManager -> {
+                    RepositoryContext<CoffeeEntity> context = new TestContext<>(entityManager, BY_NAME, Map.of(), CursorCodec.DEFAULT, lossy);
+                    Cursors.stream(cursor -> EntityQueries.of(CoffeeEntity.class).scroll(context, null, null, cursor), Sort.parse("strength"), 2)
+                            .limit(100)
+                            .toList();
+                }))
+                .withMessageContaining("cannot advance past its boundary row");
     }
 
     @Test

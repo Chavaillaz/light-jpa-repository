@@ -2,6 +2,7 @@ package com.chavaillaz.jakarta.persistence.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 import java.util.Iterator;
 import java.util.List;
@@ -194,6 +195,18 @@ class CursorsTest {
             assertThat(result.hasNext()).isFalse();
             assertThat(result.hasPrevious()).isTrue();
             assertThat(CODEC.decode(result.previous())).isEqualTo(position(List.of("Robusta"), true));
+        }
+
+        @Test
+        @DisplayName("refuses a page issuing the very position it was requested with, in either direction")
+        void refusesAPageThatCannotAdvance() {
+            // The seek predicate excludes the boundary row: only a key reading back as another value brings it back
+            assertThatIllegalStateException()
+                    .isThrownBy(() -> Cursors.toResult(CODEC, BEANS, Cursor.first(3, SORT), SORT, position(List.of("Robusta"), false), CursorKeyCodec.DEFAULT))
+                    .withMessageContaining("cannot advance past its boundary row");
+            assertThatIllegalStateException()
+                    .isThrownBy(() -> Cursors.toResult(CODEC, BEANS, Cursor.first(3, SORT), SORT, position(List.of("Robusta"), true), CursorKeyCodec.DEFAULT))
+                    .withMessageContaining("cannot advance past its boundary row");
         }
 
         @Test

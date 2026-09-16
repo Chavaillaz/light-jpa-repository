@@ -10,6 +10,9 @@ import org.jspecify.annotations.Nullable;
  * the token. Override it to support an attribute type {@link CursorValues} does not, such as a custom identifier
  * type or one behind an attribute converter, or to carry a precision the default representation drops, typically
  * delegating to {@link #DEFAULT} for every other type.
+ * <p>
+ * A key must read back as the very value it was written from: the seek predicate would otherwise start from another
+ * position than the boundary row, and a page bringing that row back is refused rather than walked forever.
  */
 public interface CursorKeyCodec {
 
