@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import jakarta.persistence.EntityManager;
 import java.util.List;
+import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +25,8 @@ class HarvestLookupTest extends HibernateTest {
 
     private static final String FARM = "Finca Deborah";
 
+    private static final int PLOT = 7;
+
     @BeforeAll
     static void setupAll() {
         setupSessionFactory(HarvestEntity.class);
@@ -33,9 +36,13 @@ class HarvestLookupTest extends HibernateTest {
     void bringInTheHarvests() {
         runInTransaction(entityManager -> {
             for (int season = 2020; season <= 2024; season++) {
-                entityManager.persist(harvest(FARM, season));
+                entityManager.persist(harvest(id(season)));
             }
         });
+    }
+
+    private static HarvestId id(int season) {
+        return new HarvestId(FARM, PLOT, season);
     }
 
     private static List<HarvestId> idsOf(List<HarvestEntity> harvests) {
@@ -45,13 +52,8 @@ class HarvestLookupTest extends HibernateTest {
     @Test
     @DisplayName("looks the identifiers up by chunks, not with one query per identifier")
     void looksUpByChunks() {
-        List<HarvestId> known = List.of(
-                new HarvestId(FARM, 2020), new HarvestId(FARM, 2021), new HarvestId(FARM, 2022),
-                new HarvestId(FARM, 2023), new HarvestId(FARM, 2024));
-        List<HarvestId> requested = List.of(
-                new HarvestId(FARM, 2020), new HarvestId(FARM, 2021), new HarvestId(FARM, 2022),
-                new HarvestId(FARM, 2023), new HarvestId(FARM, 2024), new HarvestId(FARM, 2019),
-                new HarvestId(FARM, 2020));
+        List<HarvestId> known = List.of(id(2020), id(2021), id(2022), id(2023), id(2024));
+        List<HarvestId> requested = List.of(id(2020), id(2021), id(2022), id(2023), id(2024), id(2019), id(2020));
 
         List<HarvestEntity> found = inTransaction(entityManager -> {
             statistics().clear();
@@ -71,18 +73,35 @@ class HarvestLookupTest extends HibernateTest {
     void reusesTheManagedEntities() {
         runInTransaction(entityManager -> {
             SmallBatchHarvestRepository repository = new SmallBatchHarvestRepository(entityManager);
-            HarvestEntity first = repository.getById(new HarvestId(FARM, 2020));
-            HarvestEntity second = repository.getById(new HarvestId(FARM, 2021));
+            HarvestEntity first = repository.getById(id(2020));
+            HarvestEntity second = repository.getById(id(2021));
             statistics().clear();
 
-            List<HarvestEntity> found = repository.findAllById(List.of(
-                    new HarvestId(FARM, 2020), new HarvestId(FARM, 2021), new HarvestId(FARM, 2022)));
+            List<HarvestEntity> found = repository.findAllById(List.of(id(2020), id(2021), id(2022)));
 
             assertThat(found).hasSize(3).contains(first, second);
             assertThat(statistics().getPrepareStatementCount())
                     .as("the one identifier not managed yet is the only one queried")
                     .isEqualTo(1);
         });
+    }
+
+    @Test
+    @DisplayName("binds at most 2000 parameters per query, each identifier binding one per column")
+    void boundsTheParametersPerQuery() {
+        List<HarvestId> ids = IntStream.range(0, 700)
+                .mapToObj(season -> new HarvestId("Finca Soledad", PLOT, season))
+                .toList();
+        runInTransaction(entityManager -> ids.forEach(id -> entityManager.persist(harvest(id))));
+        recordStatements();
+
+        List<HarvestEntity> found = inTransaction(entityManager -> new HarvestRepositoryJpa(entityManager).findAllById(ids));
+
+        assertThat(found).hasSize(700);
+        assertThat(statements())
+                .as("seven hundred identifiers of three columns, which a single query binds 2100 parameters for")
+                .hasSize(2)
+                .allSatisfy(sql -> assertThat(sql.chars().filter(character -> character == '?').count()).isLessThanOrEqualTo(2000));
     }
 
     /**

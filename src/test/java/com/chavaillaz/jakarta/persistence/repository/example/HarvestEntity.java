@@ -16,8 +16,8 @@ import org.jspecify.annotations.Nullable;
 import com.chavaillaz.jakarta.persistence.Identifiable;
 
 /**
- * A harvest of a farm, identified by the farm and the season through an identifier class: unlike an embedded
- * identifier, no single attribute holds the whole of it.
+ * A harvest of a plot of a farm in a season, identified through an identifier class: unlike an embedded identifier,
+ * no single attribute holds the whole of it, which spans three columns.
  */
 @Getter
 @Setter
@@ -30,20 +30,24 @@ public class HarvestEntity implements Identifiable<HarvestEntity.HarvestId> {
     private @Nullable String farm;
 
     @Id
+    private int plot;
+
+    @Id
     private int season;
 
     private int kilograms;
 
-    public static HarvestEntity harvest(String farm, int season) {
+    public static HarvestEntity harvest(HarvestId id) {
         HarvestEntity harvest = new HarvestEntity();
-        harvest.setFarm(farm);
-        harvest.setSeason(season);
+        harvest.setFarm(id.getFarm());
+        harvest.setPlot(id.getPlot());
+        harvest.setSeason(id.getSeason());
         return harvest;
     }
 
     @Override
     public @Nullable HarvestId getId() {
-        return farm == null ? null : new HarvestId(farm, season);
+        return farm == null ? null : new HarvestId(farm, plot, season);
     }
 
     @Getter
@@ -54,6 +58,8 @@ public class HarvestEntity implements Identifiable<HarvestEntity.HarvestId> {
     public static class HarvestId implements Serializable {
 
         private String farm;
+
+        private int plot;
 
         private int season;
 

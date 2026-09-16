@@ -3,6 +3,7 @@ package com.chavaillaz.jakarta.persistence.repository;
 import static com.chavaillaz.jakarta.persistence.repository.Pageable.sortedBy;
 import static com.chavaillaz.jakarta.persistence.repository.Pageable.unpaged;
 import static jakarta.transaction.Transactional.TxType.MANDATORY;
+import static java.lang.Math.max;
 import static java.lang.Math.min;
 
 import jakarta.persistence.EntityManager;
@@ -27,6 +28,7 @@ import java.util.stream.Stream;
 import org.hibernate.BatchSize;
 import org.hibernate.Session;
 import org.hibernate.SessionCheckMode;
+import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.hibernate.query.restriction.Restriction;
 import org.jspecify.annotations.Nullable;
 
@@ -55,6 +57,12 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * databases, Oracle rejecting a list of more than a thousand elements.
      */
     protected static final int DEFAULT_ID_BATCH_SIZE = 1_000;
+
+    /**
+     * Number of parameters a lookup by identifiers binds at most by default, each identifier binding one per column
+     * it spans, and SQL Server rejecting a statement binding more than 2 100 of them.
+     */
+    protected static final int DEFAULT_ID_PARAMETER_LIMIT = 2_000;
 
     /**
      * Number of entities saved between two flushes of the persistence context, matching the default JDBC batch
@@ -239,15 +247,32 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
 
     /**
      * Gets the number of identifiers looked up by a single {@code IN} predicate, {@value #DEFAULT_ID_BATCH_SIZE}
-     * by default.
+     * by default, fewer for an identifier spanning several columns, so that a query binds at most
+     * {@value #DEFAULT_ID_PARAMETER_LIMIT} parameters.
      * <p>
      * Override to match the limit of the underlying database, which rejects a longer list of parameters, or to
-     * lower it so that the query plans stay cacheable.
+     * lower it so that the query plans stay cacheable. An override counts identifiers, whatever the number of
+     * columns each one spans.
      *
      * @return The maximum number of identifiers per query, which must be strictly positive, {@link #findAllById(Collection)} rejecting anything else
      */
     protected int idBatchSize() {
-        return DEFAULT_ID_BATCH_SIZE;
+        return max(1, min(DEFAULT_ID_BATCH_SIZE, DEFAULT_ID_PARAMETER_LIMIT / idColumnCount()));
+    }
+
+    /**
+     * Gets the number of columns the identifier of the managed entity spans, which is the number of parameters a
+     * lookup binds per identifier.
+     *
+     * @return The number of columns of the identifier, several for a composite one
+     */
+    private int idColumnCount() {
+        return entityManager.getEntityManagerFactory()
+                .unwrap(SessionFactoryImplementor.class)
+                .getMappingMetamodel()
+                .getEntityDescriptor(entityType)
+                .getIdentifierMapping()
+                .getJdbcTypeCount();
     }
 
     /**
