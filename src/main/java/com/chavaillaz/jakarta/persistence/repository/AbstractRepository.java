@@ -822,7 +822,9 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * <p>
      * Each flush dirty checks every entity the persistence context holds, so saving without clearing costs the
      * square of the number of entities; by batches, both the memory and that cost stay bounded, and
-     * {@code hibernate.jdbc.batch_size} can group the statements when set to match {@code batchSize}.
+     * {@code hibernate.jdbc.batch_size} can group the statements when set to match {@code batchSize}, save the
+     * inserts of an entity whose identifier an identity column generates, which Hibernate sends one at a time to
+     * read that identifier back.
      * <p>
      * Clearing detaches <em>every</em> entity of the persistence context, not only the saved ones, and the
      * generated identifiers are the only state guaranteed on the given entities: call this from a method owning its
