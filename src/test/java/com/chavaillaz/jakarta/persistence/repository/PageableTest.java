@@ -1,6 +1,7 @@
 package com.chavaillaz.jakarta.persistence.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -92,6 +93,18 @@ class PageableTest {
         assertThat(Pageable.of(-1, 10).orDefault(0, 20)).isEqualTo(Pageable.of(0, 10));
         assertThat(Pageable.of(3, 0).orDefault(0, 20)).isEqualTo(Pageable.of(3, 20));
         assertThat(Pageable.of(-1, 10).orDefault(0, 20).isPaginated()).isTrue();
+    }
+
+    @ParameterizedTest(name = "page {0} of size {1} is refused")
+    @CsvSource({"-1, 20", "0, 0", "0, -5"})
+    @DisplayName("refuses a default that addresses no page, rather than returning everything")
+    void refusesADefaultAddressingNoPage(int defaultPage, int defaultSize) {
+        assertThatIllegalArgumentException()
+                .as("even when the requested coordinates need no default")
+                .isThrownBy(() -> Pageable.of(3, 5).orDefault(defaultPage, defaultSize))
+                .withMessageContaining("must address a page");
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> Pageable.of(null, null).orDefault(defaultPage, defaultSize));
     }
 
     @Test

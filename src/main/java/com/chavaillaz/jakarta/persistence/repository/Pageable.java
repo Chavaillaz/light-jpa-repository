@@ -120,11 +120,17 @@ public record Pageable(
      * A coordinate that cannot address a page, such as a negative page number, is replaced as a missing one is,
      * so that such an endpoint never returns the whole table.
      *
-     * @param defaultPage The page number to apply when none is requested
-     * @param defaultSize The number of items per page to apply when none is requested
+     * @param defaultPage The page number to apply when none is requested, which must be positive or zero
+     * @param defaultSize The number of items per page to apply when none is requested, which must be strictly
+     *                    positive
      * @return The corresponding request
+     * @throws IllegalArgumentException if a default coordinate cannot address a page either
      */
     public Pageable orDefault(int defaultPage, int defaultSize) {
+        if (defaultPage < 0 || defaultSize < 1) {
+            // Normalized as any other coordinate, such a default would disable the pagination it is meant to enforce
+            throw new IllegalArgumentException("The default coordinates must address a page, got page %d of size %d".formatted(defaultPage, defaultSize));
+        }
         return new Pageable(
                 page == NO_PAGINATION ? defaultPage : page,
                 size == NO_PAGINATION ? defaultSize : size,
