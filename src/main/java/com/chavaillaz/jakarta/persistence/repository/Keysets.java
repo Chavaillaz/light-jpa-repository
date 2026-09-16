@@ -67,13 +67,19 @@ public final class Keysets {
             throw new IllegalArgumentException("The cursor does not match the requested ordering");
         }
 
+        // Parsed once each, a key being compared again in every conjunction after its own, and a number taking a time
+        // growing with the square of its length to parse
+        List<Bound<?>> bounds = IntStream.range(0, criteria.size())
+                .<Bound<?>>mapToObj(index -> Bound.parse(root, criteria.get(index), values.get(index), codec))
+                .toList();
+
         List<Predicate> disjunction = new ArrayList<>();
-        for (int index = 0; index < criteria.size(); index++) {
+        for (int index = 0; index < bounds.size(); index++) {
             List<Predicate> conjunction = new ArrayList<>();
             for (int previous = 0; previous < index; previous++) {
-                conjunction.add(equal(criteriaBuilder, root, criteria.get(previous), values.get(previous), codec));
+                conjunction.add(bounds.get(previous).equal(criteriaBuilder));
             }
-            conjunction.add(after(criteriaBuilder, root, criteria.get(index), values.get(index), codec));
+            conjunction.add(bounds.get(index).after(criteriaBuilder));
             disjunction.add(criteriaBuilder.and(conjunction.toArray(Predicate[]::new)));
         }
         return criteriaBuilder.or(disjunction.toArray(Predicate[]::new));
@@ -135,33 +141,57 @@ public final class Keysets {
                 .toList();
     }
 
-    private static Predicate equal(CriteriaBuilder builder, From<?, ?> root, SortCriterion criterion, String value, CursorKeyCodec codec) {
-        Path<?> path = AttributePaths.path(root, criterion.property());
-        // equal accepts a plain Object, so no comparability is required here
-        return builder.equal(path, codec.parse(value, AttributePaths.javaTypeOf(path)));
-    }
-
     /**
-     * Builds the strict comparison of an ordering key against the value of the boundary row, in the direction of
-     * the criterion.
+     * Ordering key of the boundary row, parsed back into the Java type of its attribute.
      * <p>
-     * The type variable ties the path and the parsed bound to the same comparable {@code Y}, inferred at the call
-     * site, so that the compiler checks what {@link CriteriaBuilder#greaterThan} requires instead of the check
+     * The type variable ties the path and the parsed value to the same comparable {@code Y}, inferred when the key
+     * is parsed, so that the compiler checks what {@link CriteriaBuilder#greaterThan} requires instead of the check
      * being silenced.
      *
      * @param <Y>       The type of the ordering key, which must be comparable to be sought on
-     * @param builder   The builder to use
-     * @param root      The root entity of the query
-     * @param criterion The ordering criterion the key belongs to
-     * @param value     The textual key of the boundary row
-     * @param codec     The codec parsing the textual key back into the Java type of its attribute
-     * @return The corresponding predicate
-     * @throws IllegalArgumentException if the type of the attribute is not supported by the given codec
+     * @param path      The path to the attribute of the key
+     * @param value     The key of the boundary row
+     * @param ascending The direction of the criterion the key belongs to
      */
-    private static <Y extends Comparable<? super Y>> Predicate after(CriteriaBuilder builder, From<?, ?> root, SortCriterion criterion, String value, CursorKeyCodec codec) {
-        Path<Y> path = AttributePaths.path(root, criterion.property());
-        Y bound = codec.parse(value, AttributePaths.javaTypeOf(path));
-        return criterion.ascending() ? builder.greaterThan(path, bound) : builder.lessThan(path, bound);
+    private record Bound<Y extends Comparable<? super Y>>(Path<Y> path, Y value, boolean ascending) {
+
+        /**
+         * Parses the textual key of the boundary row for the given criterion.
+         *
+         * @param <Y>       The type of the ordering key
+         * @param root      The root entity of the query
+         * @param criterion The ordering criterion the key belongs to
+         * @param value     The textual key of the boundary row
+         * @param codec     The codec parsing the textual key back into the Java type of its attribute
+         * @return The corresponding key
+         * @throws IllegalArgumentException if the type of the attribute is not supported by the given codec
+         */
+        static <Y extends Comparable<? super Y>> Bound<Y> parse(From<?, ?> root, SortCriterion criterion, String value, CursorKeyCodec codec) {
+            Path<Y> path = AttributePaths.path(root, criterion.property());
+            return new Bound<>(path, codec.parse(value, AttributePaths.javaTypeOf(path)), criterion.ascending());
+        }
+
+        /**
+         * Builds the equality of the ordering key to the key of the boundary row.
+         *
+         * @param builder The builder to use
+         * @return The corresponding predicate
+         */
+        Predicate equal(CriteriaBuilder builder) {
+            return builder.equal(path, value);
+        }
+
+        /**
+         * Builds the strict comparison of the ordering key against the key of the boundary row, in the direction of
+         * the criterion.
+         *
+         * @param builder The builder to use
+         * @return The corresponding predicate
+         */
+        Predicate after(CriteriaBuilder builder) {
+            return ascending ? builder.greaterThan(path, value) : builder.lessThan(path, value);
+        }
+
     }
 
 }

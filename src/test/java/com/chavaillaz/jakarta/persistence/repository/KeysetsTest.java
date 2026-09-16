@@ -20,9 +20,11 @@ import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Order;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -162,6 +164,32 @@ class KeysetsTest extends HibernateTest {
         assertThat(namesOf(found))
                 .as("everything strictly after (MEDIUM, 6) in that ordering")
                 .containsExactly(BLUE_MOUNTAIN);
+    }
+
+    @Test
+    @DisplayName("parses each key of the boundary row once, however many conjunctions compare it")
+    void parsesEachKeyOnce() {
+        List<String> parsed = new ArrayList<>();
+        CursorKeyCodec counting = new CursorKeyCodec() {
+
+            @Override
+            public String format(String property, @Nullable Object value) {
+                return CursorKeyCodec.DEFAULT.format(property, value);
+            }
+
+            @Override
+            public <Y> Y parse(String value, Class<Y> type) {
+                parsed.add(value);
+                return CursorKeyCodec.DEFAULT.parse(value, type);
+            }
+
+        };
+
+        Keysets.seek(builder, root, Sort.parse("price,strength,name,id"), List.of("42.00", "5", KONA, "1"), counting);
+
+        assertThat(parsed)
+                .as("the price is compared in all four conjunctions, and a number costs the square of its length to parse")
+                .containsExactly("42.00", "5", KONA, "1");
     }
 
     @Test
