@@ -24,6 +24,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Stream;
 
+import org.hibernate.BatchSize;
+import org.hibernate.Session;
+import org.hibernate.SessionCheckMode;
 import org.hibernate.query.restriction.Restriction;
 import org.jspecify.annotations.Nullable;
 
@@ -198,20 +201,22 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
             return List.of();
         }
 
-        Optional<String> idAttribute = singleIdAttributeName();
-        if (idAttribute.isEmpty()) {
-            // An identifier class spreads the identifier over several attributes, which no single predicate compares
-            return distinctIds.stream()
-                    .map(id -> entityManager.find(entityType, id))
-                    .filter(Objects::nonNull)
-                    .toList();
-        }
-
         // Looked up by chunks, the databases rejecting a long IN list; the hook is read once and validated, since a
         // non-positive size would never advance the loop
         int batchSize = idBatchSize();
         if (batchSize < 1) {
             throw new IllegalArgumentException("The batch size must be strictly positive, got %d".formatted(batchSize));
+        }
+
+        Optional<String> idAttribute = singleIdAttributeName();
+        if (idAttribute.isEmpty()) {
+            // An identifier class spreads the identifier over several attributes, which no single predicate compares:
+            // Hibernate compares them as a tuple instead, by the same chunks, rather than one query per identifier
+            return entityManager.unwrap(Session.class)
+                    .findMultiple(entityType, distinctIds, new BatchSize(batchSize), SessionCheckMode.ENABLED)
+                    .stream()
+                    .filter(Objects::nonNull)
+                    .toList();
         }
 
         List<E> entities = new ArrayList<>(distinctIds.size());
