@@ -135,6 +135,9 @@ public interface Repository<E extends Identifiable<I>, I> {
 
     /**
      * Checks whether an entity exists for the given identifier, without fetching its state.
+     * <p>
+     * An identifier class is the exception: it spreads the identifier over several attributes, which no single
+     * predicate compares, so the entity is looked up as {@link #findById(Object)} does and its state is fetched.
      *
      * @param id The entity identifier, {@code null} never matching any entity
      * @return {@code true} if an entity exists for the given identifier, {@code false} otherwise
