@@ -326,6 +326,46 @@ another one. Every ordering key must be a non-nullable, non-collection attribute
 wrapper types, `String`, `UUID`, the `java.time` types, `Date`, `BigDecimal` and `BigInteger`, and enums), which is
 checked against the mapping on the first page rather than discovered halfway through a walk.
 
+#### Carrying an unsupported key type
+
+Override `cursorKeyCodec()` to teach a repository a key type that list does not cover — a custom identifier, a
+value behind an attribute converter, or a precision the default representation drops — delegating to
+`CursorKeyCodec.DEFAULT` for every other type:
+
+```java
+@Override
+protected CursorKeyCodec cursorKeyCodec() {
+    return new CursorKeyCodec() {
+
+        @Override
+        public String format(String property, Object value) {
+            return value instanceof YearMonth month
+                    ? month.toString()
+                    : CursorKeyCodec.DEFAULT.format(property, value);
+        }
+
+        @Override
+        public <Y> Y parse(String value, Class<Y> type) {
+            return type == YearMonth.class
+                    ? type.cast(YearMonth.parse(value))
+                    : CursorKeyCodec.DEFAULT.parse(value, type);
+        }
+
+    };
+}
+```
+
+What `format` writes, `parse` must read back as the very same value: a key that does not round-trip would make the
+seek start from somewhere other than the boundary row, which the repository refuses rather than walking the same
+page forever.
+
+#### Signing or encrypting the tokens
+
+`cursorKeyCodec()` handles one key; `cursorCodec()` handles the whole position. Override it to sign or encrypt the
+tokens when the ordering keys must not leak to the API consumers, or when forged positions have to be rejected —
+the default `Base64CursorCodec` is opaque, but it is not tamper-proof, and the ordering fingerprint a token carries
+only guards against an accidental replay on another ordering, never against a deliberate one.
+
 ### Walking every entity
 
 `streamAll()` drives the cursor pagination for you, returning a lazy `Stream` fetching a page at a time instead of
