@@ -15,6 +15,16 @@ Dynamic filtering exposed to the API consumers as [RSQL](https://github.com/jiru
 not part of this library: it is an optional extension, built on the very same collaborators, provided by the
 sibling [rsql-jpa-repository](https://github.com/chavaillaz/rsql-jpa-repository).
 
+## Requirements
+
+- **Java 21** or later
+- **Jakarta Persistence 3.2**
+- **Hibernate ORM 7.x** as the provider
+
+Hibernate is not interchangeable here: the library builds its queries with the `Restriction` and
+`SelectionSpecification` APIs and reads the Hibernate query tree to detect the joins that would duplicate an
+entity, so another JPA provider is not supported.
+
 ## Installation
 
 The dependency is available in maven central (see badge for version):
