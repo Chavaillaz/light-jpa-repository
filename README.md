@@ -2,7 +2,7 @@
 
 ![Quality Gate](https://github.com/chavaillaz/light-jpa-repository/actions/workflows/code-quality.yml/badge.svg)
 ![Dependency Check](https://github.com/chavaillaz/light-jpa-repository/actions/workflows/dependency-check.yml/badge.svg)
-[![Maven Central](https://maven-badges.herokuapp.com/maven-central/com.chavaillaz/light-jpa-repository/badge.svg)](https://maven-badges.herokuapp.com/maven-central/com.chavaillaz/light-jpa-repository)
+[![Maven Central](https://img.shields.io/maven-central/v/com.chavaillaz/light-jpa-repository)](https://central.sonatype.com/artifact/com.chavaillaz/light-jpa-repository)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 Library to help implementing JPA based (Java Persistence API) repositories.
