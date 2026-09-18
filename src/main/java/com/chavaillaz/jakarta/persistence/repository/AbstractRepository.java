@@ -842,6 +842,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @return The number of saved entities
      * @see #saveAllInBatches(Collection, int)
      */
+    @Override
     public int saveAllInBatches(Collection<E> entities) {
         return saveAllInBatches(entities, DEFAULT_SAVE_BATCH_SIZE);
     }
@@ -868,6 +869,7 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @return The number of saved entities
      * @throws IllegalArgumentException if {@code batchSize} is not strictly positive
      */
+    @Override
     public int saveAllInBatches(Collection<E> entities, int batchSize) {
         if (batchSize < 1) {
             throw new IllegalArgumentException("The batch size must be strictly positive, got %d".formatted(batchSize));

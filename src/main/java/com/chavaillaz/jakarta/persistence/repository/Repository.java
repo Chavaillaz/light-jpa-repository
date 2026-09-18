@@ -313,6 +313,32 @@ public interface Repository<E extends Identifiable<I>, I> {
     }
 
     /**
+     * Saves the given entities, flushing the persistence context and detaching the saved entities at the default
+     * batch size of the implementation, {@link AbstractRepository#DEFAULT_SAVE_BATCH_SIZE}.
+     *
+     * @param entities The entities to save
+     * @return The number of saved entities
+     * @see #saveAllInBatches(Collection, int)
+     */
+    int saveAllInBatches(Collection<E> entities);
+
+    /**
+     * Saves the given entities, flushing the persistence context and detaching the saved entities every
+     * {@code batchSize} entities, for the bulk loads a plain {@link #saveAll(Collection)} cannot hold in memory.
+     * <p>
+     * Only the number of saved entities is returned, and only their generated identifiers are guaranteed on the
+     * given entities: returning the copies a merge makes is what holding a whole batch of them would defeat. See
+     * {@link AbstractRepository#saveAllInBatches(Collection, int)} for what leaves the persistence context and
+     * what the batch size buys.
+     *
+     * @param entities  The entities to save
+     * @param batchSize The number of entities saved between two flushes, which must be strictly positive
+     * @return The number of saved entities
+     * @throws IllegalArgumentException if {@code batchSize} is not strictly positive
+     */
+    int saveAllInBatches(Collection<E> entities, int batchSize);
+
+    /**
      * Deletes the entity with the given identifier, doing nothing when it does not exist.
      *
      * @param id The entity identifier
