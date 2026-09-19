@@ -153,6 +153,16 @@ class EntityOrderingTest extends HibernateTest {
                     .withMessage("Cannot sort on collection property notes");
         }
 
+        @Test
+        @DisplayName("rejects a property nested deeper than a join chain may go, the criteria coming from the consumers")
+        void rejectsATooDeeplyNestedProperty() {
+            String property = String.join(".", nCopies(12, "roaster"));
+
+            assertThatIllegalArgumentException()
+                    .isThrownBy(() -> ordering().resolvePath(openContext(), root, property))
+                    .withMessageContaining("nested over more than 10 attributes");
+        }
+
         @ParameterizedTest
         @ValueSource(strings = {"name.length", "price.scale", "roastedAt.nano"})
         @DisplayName("rejects a property dereferencing a basic attribute, which Path#get raises an IllegalStateException for")

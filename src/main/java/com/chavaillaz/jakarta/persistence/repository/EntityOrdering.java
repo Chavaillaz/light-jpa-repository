@@ -38,6 +38,14 @@ import org.jspecify.annotations.Nullable;
 public class EntityOrdering<E> {
 
     /**
+     * Number of attributes a property may be nested over, each one but the last being navigated with a join: a
+     * property comes from the API consumers, and a self referencing association, such as the parent of a tree node,
+     * would otherwise let a property repeating it join the same table once per attribute it names, turning a query
+     * parameter of a few kilobytes into a query joining hundreds of tables.
+     */
+    protected static final int MAX_NESTING_DEPTH = 10;
+
+    /**
      * The ordering rules of each entity type, held in a {@link ClassValue} rather than in a map keyed by the
      * class, so that the cache cannot keep a class loader alive after a redeployment.
      */
@@ -224,10 +232,15 @@ public class EntityOrdering<E> {
      * @param root     The root entity of the query
      * @param property The property to resolve
      * @return The corresponding path
-     * @throws IllegalArgumentException if the property is unknown or refers to a collection
+     * @throws IllegalArgumentException if the property is unknown, refers to a collection, or is nested over more
+     *                                  than {@value #MAX_NESTING_DEPTH} attributes
      */
     public Path<?> resolvePath(RepositoryContext<E> context, Root<E> root, String property) {
         String[] attributes = AttributePaths.split(resolveProperty(context, property));
+        if (attributes.length > MAX_NESTING_DEPTH) {
+            // Refused before a single join is created, see MAX_NESTING_DEPTH
+            throw new IllegalArgumentException("Cannot sort on property %s: nested over more than %d attributes".formatted(property, MAX_NESTING_DEPTH));
+        }
 
         Path<?> path = root;
         for (int index = 0; index < attributes.length; index++) {
