@@ -452,6 +452,8 @@ public abstract class AbstractRepository<E extends Identifiable<I>, I> implement
      * @throws IllegalArgumentException if the ordering is not usable as a cursor key, if an ordering key of the
      *                                  boundary row is {@code null}, or if the cursor is malformed or was issued
      *                                  for another ordering
+     * @throws IllegalStateException    if the page would issue the very position it was requested with, which only
+     *                                  a key reading back as another value than the one written brings about
      */
     protected CursorResult<E> scroll(@Nullable Restriction<? super E> restriction, @Nullable Criteria<E> criteria, Cursor cursor) {
         return queries().scroll(context(), restriction, criteria, cursor);

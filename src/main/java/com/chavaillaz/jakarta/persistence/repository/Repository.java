@@ -170,6 +170,8 @@ public interface Repository<E extends Identifiable<I>, I> {
      * @return The corresponding page with the tokens of the surrounding ones
      * @throws IllegalArgumentException if the ordering refers to an unknown property, to a collection, or if the
      *                                  cursor is malformed or was issued for another ordering
+     * @throws IllegalStateException    if the page would issue the very position it was requested with, which only
+     *                                  a key reading back as another value than the one written brings about
      */
     CursorResult<E> findAll(Cursor cursor);
 
