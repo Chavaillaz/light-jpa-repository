@@ -46,6 +46,15 @@ public class EntityOrdering<E> {
     protected static final int MAX_NESTING_DEPTH = 10;
 
     /**
+     * Number of distinct properties an ordering may be requested on: the ordering comes from the API consumers, and
+     * {@link #MAX_NESTING_DEPTH} only bounds the joins of each property, so that properties branching through two
+     * associations leading back to the entity, such as the father and the mother of a person, would otherwise join
+     * hundreds of tables from a query parameter of a few kilobytes. A repeated property counts once, its joins being
+     * reused.
+     */
+    protected static final int MAX_SORT_PROPERTIES = 10;
+
+    /**
      * The ordering rules of each entity type, held in a {@link ClassValue} rather than in a map keyed by the
      * class, so that the cache cannot keep a class loader alive after a redeployment.
      */
@@ -151,6 +160,8 @@ public class EntityOrdering<E> {
      * @param sort    The requested ordering, {@link Sort#NONE} or {@code null} to apply the default ordering of
      *                the repository
      * @return The ordering to apply
+     * @throws IllegalArgumentException if a criterion refers to an unknown property or to a collection, or if more
+     *                                  than {@value #MAX_SORT_PROPERTIES} distinct properties are requested
      */
     public List<Order> buildOrders(RepositoryContext<E> context, Root<E> root, @Nullable Sort sort) {
         CriteriaBuilder criteriaBuilder = context.entityManager().getCriteriaBuilder();
@@ -160,7 +171,7 @@ public class EntityOrdering<E> {
         if (sort == null || sort.isEmpty()) {
             context.defaultOrders(criteriaBuilder, root).forEach(order -> keep(orders, order));
         } else {
-            sort.criteria().forEach(criterion -> keep(orders, toOrder(context, criteriaBuilder, root, criterion)));
+            requestedCriteria(sort).forEach(criterion -> keep(orders, toOrder(context, criteriaBuilder, root, criterion)));
         }
 
         // Appended unless already part of the ordering, so that the direction asked for it stands
@@ -178,6 +189,22 @@ public class EntityOrdering<E> {
      */
     private static void keep(Map<Expression<?>, Order> orders, Order order) {
         orders.putIfAbsent(order.getExpression(), order);
+    }
+
+    /**
+     * Gets the criteria of a requested ordering, checking before a single join is created that they name at most
+     * {@value #MAX_SORT_PROPERTIES} distinct properties.
+     *
+     * @param sort The requested ordering
+     * @return The criteria of the ordering
+     * @throws IllegalArgumentException if more than {@value #MAX_SORT_PROPERTIES} distinct properties are requested
+     */
+    private static List<SortCriterion> requestedCriteria(Sort sort) {
+        long properties = sort.criteria().stream().map(SortCriterion::property).distinct().count();
+        if (properties > MAX_SORT_PROPERTIES) {
+            throw new IllegalArgumentException("Cannot sort on more than %d properties, got %d".formatted(MAX_SORT_PROPERTIES, properties));
+        }
+        return sort.criteria();
     }
 
     /**
@@ -272,7 +299,8 @@ public class EntityOrdering<E> {
      * @param sort    The requested ordering, {@link Sort#NONE} or {@code null} to apply the default ordering of
      *                the repository
      * @return The complete ordering, made of path based criteria only
-     * @throws IllegalArgumentException if a criterion refers to an unknown property, to a collection, or if the
+     * @throws IllegalArgumentException if a criterion refers to an unknown property, to a collection, if more than
+     *                                  {@value #MAX_SORT_PROPERTIES} distinct properties are requested, or if the
      *                                  default ordering of the repository is not expressed with plain paths
      */
     public Sort resolveSort(RepositoryContext<E> context, @Nullable Sort sort) {
@@ -287,7 +315,7 @@ public class EntityOrdering<E> {
                 keep(criteria, new SortCriterion(nameOf(order.getExpression()), order.isAscending()));
             }
         } else {
-            for (SortCriterion criterion : sort.criteria()) {
+            for (SortCriterion criterion : requestedCriteria(sort)) {
                 keep(criteria, new SortCriterion(nameOf(resolvePath(context, root, criterion.property())), criterion.ascending()));
             }
         }

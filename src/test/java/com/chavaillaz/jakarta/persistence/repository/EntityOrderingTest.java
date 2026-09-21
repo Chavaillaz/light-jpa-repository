@@ -38,6 +38,11 @@ class EntityOrderingTest extends HibernateTest {
     private static final BiFunction<CriteriaBuilder, Root<CoffeeEntity>, List<Order>> NO_DEFAULT =
             (builder, root) -> List.of();
 
+    /**
+     * As many distinct properties of a coffee as an ordering may compare.
+     */
+    private static final String TEN_PROPERTIES = "name,origin,roast,price,strength,roastedAt,decafLabel,id,roaster.name,roaster.country";
+
     private EntityManager entityManager;
 
     @BeforeAll
@@ -223,6 +228,16 @@ class EntityOrderingTest extends HibernateTest {
         }
 
         @Test
+        @DisplayName("rejects more distinct properties than an ordering may compare, the criteria coming from the consumers")
+        void rejectsTooManyProperties() {
+            Sort eleven = Sort.parse(TEN_PROPERTIES + ",roaster.version");
+
+            assertThatIllegalArgumentException()
+                    .isThrownBy(() -> ordering().resolveSort(openContext(), eleven))
+                    .withMessage("Cannot sort on more than 10 properties, got 11");
+        }
+
+        @Test
         @DisplayName("collapses two public properties aliasing the very same attribute")
         void collapsesTwoAliasesOfTheSameAttribute() {
             RepositoryContext<CoffeeEntity> context = context(Map.of("brewer", "roaster.name", "roaster", "roaster.name"), BY_NAME);
@@ -313,6 +328,25 @@ class EntityOrderingTest extends HibernateTest {
             Sort repeated = Sort.parse(String.join(",", nCopies(200, "name")));
 
             assertThat(ordering().buildOrders(openContext(), root, repeated)).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("rejects more distinct properties than an ordering may compare, before joining any of them")
+        void rejectsTooManyProperties() {
+            Sort eleven = Sort.parse(TEN_PROPERTIES + ",roaster.version");
+
+            assertThatIllegalArgumentException()
+                    .isThrownBy(() -> ordering().buildOrders(openContext(), root, eleven))
+                    .withMessage("Cannot sort on more than 10 properties, got 11");
+            assertThat(root.getJoins()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("counts a repeated property once towards the properties an ordering may compare")
+        void countsARepeatedPropertyOnce() {
+            Sort repeated = Sort.parse(TEN_PROPERTIES + ",-name,name");
+
+            assertThat(ordering().buildOrders(openContext(), root, repeated)).hasSize(10);
         }
 
     }
