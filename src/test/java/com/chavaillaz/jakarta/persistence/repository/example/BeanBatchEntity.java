@@ -5,6 +5,7 @@ import jakarta.persistence.Embeddable;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.util.Locale;
@@ -53,6 +54,9 @@ public class BeanBatchEntity implements Identifiable<BeanBatchEntity.BatchId> {
     @AllArgsConstructor
     @EqualsAndHashCode
     public static class BatchId implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
 
         @Column(name = "roaster_code", nullable = false, length = 10)
         private String roasterCode;

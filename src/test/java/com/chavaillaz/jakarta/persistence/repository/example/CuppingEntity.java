@@ -4,6 +4,7 @@ import jakarta.persistence.Embeddable;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import java.io.Serial;
 import java.io.Serializable;
 
 import lombok.AllArgsConstructor;
@@ -42,6 +43,9 @@ public class CuppingEntity implements Identifiable<CuppingEntity.CuppingId> {
     @AllArgsConstructor
     @EqualsAndHashCode
     public static class CuppingId implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
 
         private String taster;
 

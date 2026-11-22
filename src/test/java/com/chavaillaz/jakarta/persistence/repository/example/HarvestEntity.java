@@ -4,6 +4,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
+import java.io.Serial;
 import java.io.Serializable;
 
 import lombok.AllArgsConstructor;
@@ -56,6 +57,9 @@ public class HarvestEntity implements Identifiable<HarvestEntity.HarvestId> {
     @AllArgsConstructor
     @EqualsAndHashCode
     public static class HarvestId implements Serializable {
+
+        @Serial
+        private static final long serialVersionUID = 1L;
 
         private String farm;
 
