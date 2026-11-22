@@ -234,12 +234,12 @@ class CoffeeRepositoryTest extends HibernateTest {
         runInTransaction(entityManager -> {
             CoffeeRepository repository = new CoffeeRepositoryJpa(entityManager);
 
-            assertThatNoException()
-                    .as("a detached entity is re-attached before being locked")
-                    .isThrownBy(() -> repository.lock(detached));
-            assertThat(entityManager.contains(detached))
+            repository.lock(detached);
+
+            assertThat(entityManager.contains(detached)).as("the detached entity is not attached itself").isFalse();
+            assertThat(entityManager.getLockMode(entityManager.find(CoffeeEntity.class, identifier.longValue())))
                     .as("the managed copy is the one being locked")
-                    .isFalse();
+                    .isEqualTo(LockModeType.PESSIMISTIC_WRITE);
         });
 
         runInTransaction(entityManager -> assertThat(new CoffeeRepositoryJpa(entityManager)
