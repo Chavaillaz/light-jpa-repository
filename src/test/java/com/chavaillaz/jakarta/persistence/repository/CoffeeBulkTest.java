@@ -14,13 +14,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceException;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.hibernate.Session;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -133,7 +133,8 @@ class CoffeeBulkTest extends HibernateTest {
         void doesNotCascade() {
             // Documented on purpose: a bulk deletion is performed by the database, which knows nothing of the
             // cascading rules of the mapping, so the tasting notes still reference the deleted coffees
-            assertThatExceptionOfType(PersistenceException.class)
+            assertThatExceptionOfType(ConstraintViolationException.class)
+                    .as("a foreign key violation, which only a statement the database accepted can raise")
                     .isThrownBy(() -> withRepository(repository -> repository.deleteTasting("nutty")));
 
             assertThat(remainingNames()).containsExactlyElementsOf(Coffees.MENU);
