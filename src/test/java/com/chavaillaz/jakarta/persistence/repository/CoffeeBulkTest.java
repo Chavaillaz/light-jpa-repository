@@ -90,13 +90,17 @@ class CoffeeBulkTest extends HibernateTest {
         @Test
         @DisplayName("stops at the first row and hydrates nothing")
         void hydratesNothing() {
-            long loaded = inTransaction(entityManager -> {
+            runInTransaction(entityManager -> {
                 statistics().clear();
-                new CoffeeRepositoryJpa(entityManager).existsFromOrigin(ETHIOPIA);
-                return statistics().getEntityLoadCount();
-            });
 
-            assertThat(loaded).as("no entity is loaded to answer the question").isZero();
+                new CoffeeRepositoryJpa(entityManager).existsFromOrigin(ETHIOPIA);
+
+                long rows = Stream.of(statistics().getQueries())
+                        .mapToLong(query -> statistics().getQueryStatistics(query).getExecutionRowCount())
+                        .sum();
+                assertThat(rows).as("the database stops at the first of the three coffees from Ethiopia").isEqualTo(1);
+                assertThat(statistics().getEntityLoadCount()).as("no entity is loaded to answer the question").isZero();
+            });
         }
 
     }

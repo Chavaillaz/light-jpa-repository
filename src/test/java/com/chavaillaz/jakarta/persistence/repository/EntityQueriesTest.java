@@ -143,8 +143,13 @@ class EntityQueriesTest extends HibernateTest {
     @Test
     @DisplayName("fetches only the first row of the first method")
     void fetchesOnlyTheFirstRow() {
+        statistics().clear();
+
         assertThat((Optional<CoffeeEntity>) withQueries((queries, context) -> queries.first(context, null, null, Sort.parse("-price"))))
                 .hasValueSatisfying(coffee -> assertThat(coffee.getName()).isEqualTo(GEISHA));
+        assertThat(statistics().getEntityLoadCount())
+                .as("a single coffee is hydrated, and not the whole menu it was ordered with")
+                .isEqualTo(1);
         assertThat((Optional<CoffeeEntity>) withQueries((queries, context) -> queries.first(context, null, null, Sort.NONE)))
                 .as("the default ordering applies when none is requested")
                 .hasValueSatisfying(coffee -> assertThat(coffee.getName()).isEqualTo(BLUE_MOUNTAIN));
