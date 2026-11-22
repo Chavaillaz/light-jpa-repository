@@ -73,6 +73,12 @@ class EntityOrderingTest extends HibernateTest {
         return context(emptyMap(), BY_NAME);
     }
 
+    private static List<String> namesOf(List<Order> orders) {
+        return orders.stream()
+                .map(order -> (order.isAscending() ? "" : "-") + EntityOrdering.nameOf(order.getExpression()))
+                .toList();
+    }
+
     @Nested
     @DisplayName("resolving a property")
     class ResolveProperty {
@@ -291,12 +297,6 @@ class EntityOrderingTest extends HibernateTest {
             root = builder.createQuery(CoffeeEntity.class).from(CoffeeEntity.class);
         }
 
-        private List<String> namesOf(List<Order> orders) {
-            return orders.stream()
-                    .map(order -> (order.isAscending() ? "" : "-") + EntityOrdering.nameOf(order.getExpression()))
-                    .toList();
-        }
-
         @Test
         @DisplayName("compares a property once, the first criterion naming it winning")
         void comparesAPropertyOnce() {
@@ -368,14 +368,14 @@ class EntityOrderingTest extends HibernateTest {
         @DisplayName("applies the default ordering even when unpaged and unsorted, for a deterministic result")
         void ordersAnUnpagedQueryWithTheDefault() {
             ordering().applyOrder(openContext(), query, root, Pageable.UNPAGED);
-            assertThat(query.getOrderList()).hasSize(2);
+            assertThat(namesOf(query.getOrderList())).containsExactly("name", "id");
         }
 
         @Test
         @DisplayName("orders a paginated query, so that the pages are stable")
         void ordersAPaginatedQuery() {
             ordering().applyOrder(openContext(), query, root, Pageable.of(0, 10));
-            assertThat(query.getOrderList()).hasSize(2);
+            assertThat(namesOf(query.getOrderList())).containsExactly("name", "id");
         }
 
         @Test
@@ -383,8 +383,7 @@ class EntityOrderingTest extends HibernateTest {
         void ordersOnTheRequestedCriteria() {
             ordering().applyOrder(openContext(), query, root, Pageable.sortedBy(Sort.parse("-price")));
 
-            assertThat(query.getOrderList()).hasSize(2);
-            assertThat(query.getOrderList().getFirst().isAscending()).isFalse();
+            assertThat(namesOf(query.getOrderList())).containsExactly("-price", "id");
         }
 
         @Test
@@ -394,7 +393,17 @@ class EntityOrderingTest extends HibernateTest {
 
             ordering().applyOrder(openContext(), query, root, Pageable.of(0, 10));
 
-            assertThat(query.getOrderList()).hasSize(1);
+            assertThat(namesOf(query.getOrderList())).containsExactly("-price");
+        }
+
+        @Test
+        @DisplayName("replaces an ordering already built by the query visitor with the requested criteria")
+        void replacesAnExistingOrderingWithTheRequestedOne() {
+            query.orderBy(entityManager.getCriteriaBuilder().desc(root.get("price")));
+
+            ordering().applyOrder(openContext(), query, root, Pageable.of(0, 10, Sort.parse("strength")));
+
+            assertThat(namesOf(query.getOrderList())).containsExactly("strength", "id");
         }
 
     }
