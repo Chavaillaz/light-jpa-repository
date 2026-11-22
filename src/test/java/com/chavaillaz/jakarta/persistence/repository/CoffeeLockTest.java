@@ -7,6 +7,7 @@ import static jakarta.persistence.LockModeType.PESSIMISTIC_WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 
+import jakarta.persistence.LockModeType;
 import java.math.BigDecimal;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -50,9 +51,10 @@ class CoffeeLockTest extends HibernateTest {
     void findsByIdUnderAWriteLock() {
         Long id = anyIdentifier();
 
-        Optional<CoffeeEntity> found = withRepository(repository -> repository.findById(id, PESSIMISTIC_WRITE));
+        LockModeType lock = inTransaction(entityManager ->
+                entityManager.getLockMode(new CoffeeRepositoryJpa(entityManager).findById(id, PESSIMISTIC_WRITE).orElseThrow()));
 
-        assertThat(found).isPresent();
+        assertThat(lock).isEqualTo(PESSIMISTIC_WRITE);
     }
 
     @Test
@@ -60,9 +62,10 @@ class CoffeeLockTest extends HibernateTest {
     void findsByIdUnderAReadLock() {
         Long id = anyIdentifier();
 
-        Optional<CoffeeEntity> found = withRepository(repository -> repository.findById(id, PESSIMISTIC_READ));
+        LockModeType lock = inTransaction(entityManager ->
+                entityManager.getLockMode(new CoffeeRepositoryJpa(entityManager).findById(id, PESSIMISTIC_READ).orElseThrow()));
 
-        assertThat(found).isPresent();
+        assertThat(lock).isEqualTo(PESSIMISTIC_READ);
     }
 
     @Test
@@ -80,9 +83,10 @@ class CoffeeLockTest extends HibernateTest {
     void getsByIdUnderALock() {
         Long id = anyIdentifier();
 
-        CoffeeEntity found = withRepository(repository -> repository.getById(id, PESSIMISTIC_WRITE));
+        LockModeType lock = inTransaction(entityManager ->
+                entityManager.getLockMode(new CoffeeRepositoryJpa(entityManager).getById(id, PESSIMISTIC_WRITE)));
 
-        assertThat(found).isNotNull();
+        assertThat(lock).isEqualTo(PESSIMISTIC_WRITE);
         assertThatExceptionOfType(NoSuchElementException.class)
                 .isThrownBy(() -> withRepository(repository -> repository.getById(-1L, PESSIMISTIC_WRITE)))
                 .withMessageContaining("No entity found with identifier -1");
@@ -91,19 +95,21 @@ class CoffeeLockTest extends HibernateTest {
     @Test
     @DisplayName("locks an entity with the requested mode, refreshing its state beforehand")
     void locksWithTheRequestedMode() {
-        CoffeeEntity detached = withRepository(repository -> repository.findAll().getFirst());
-        detached.setPrice(new BigDecimal("999.00"));
+        Long id = anyIdentifier();
 
-        String name = withRepository(repository -> {
-            repository.lock(detached, PESSIMISTIC_READ);
-            return detached.getName();
+        runInTransaction(entityManager -> {
+            CoffeeRepositoryJpa repository = new CoffeeRepositoryJpa(entityManager);
+            CoffeeEntity coffee = repository.getById(id);
+            // Committed by another transaction once this one read the row, so the managed copy no longer holds it
+            runInTransaction(other -> new CoffeeRepositoryJpa(other).getById(id).setPrice(new BigDecimal("999.00")));
+
+            repository.lock(coffee, PESSIMISTIC_READ);
+
+            assertThat(entityManager.getLockMode(coffee)).isEqualTo(PESSIMISTIC_READ);
+            assertThat(coffee.getPrice())
+                    .as("the change committed in between is read, not the copy predating it")
+                    .isEqualByComparingTo("999.00");
         });
-
-        assertThat(name).isNotNull();
-        BigDecimal stored = withRepository(repository -> repository.getById(detached.getId()).getPrice());
-
-        assertThat(stored).as("the local change is discarded by the refresh, not persisted")
-                .isNotEqualByComparingTo(new BigDecimal("999.00"));
     }
 
     @Test
@@ -111,12 +117,12 @@ class CoffeeLockTest extends HibernateTest {
     void locksWithAWriteByDefault() {
         CoffeeEntity detached = withRepository(repository -> repository.findAll().getFirst());
 
-        Optional<CoffeeEntity> locked = withRepository(repository -> {
-            repository.lock(detached);
-            return repository.findById(detached.getId());
+        LockModeType lock = inTransaction(entityManager -> {
+            new CoffeeRepositoryJpa(entityManager).lock(detached);
+            return entityManager.getLockMode(entityManager.find(CoffeeEntity.class, detached.getId()));
         });
 
-        assertThat(locked).isPresent();
+        assertThat(lock).as("the managed copy the detached entity is re-attached to holds the lock").isEqualTo(PESSIMISTIC_WRITE);
     }
 
     @Test
@@ -135,9 +141,13 @@ class CoffeeLockTest extends HibernateTest {
     @Test
     @DisplayName("claims the first matching entity under a lock, which is what a queue is polled with")
     void claimsTheFirstMatchingEntity() {
-        Optional<CoffeeEntity> claimed = withRepository(repository -> repository.claimStrongest(6));
-
-        assertThat(claimed).hasValueSatisfying(coffee -> assertThat(coffee.getName()).isEqualTo(HARRAR));
+        runInTransaction(entityManager -> assertThat(new CoffeeRepositoryJpa(entityManager).claimStrongest(6))
+                .hasValueSatisfying(coffee -> {
+                    assertThat(coffee.getName()).isEqualTo(HARRAR);
+                    assertThat(entityManager.getLockMode(coffee))
+                            .as("the claimed row stays locked until the transaction ends")
+                            .isEqualTo(PESSIMISTIC_WRITE);
+                }));
     }
 
 }
