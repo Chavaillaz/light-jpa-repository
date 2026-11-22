@@ -93,8 +93,8 @@ class EntityQueriesTest extends HibernateTest {
         assertThat(page.totalItems()).isEqualTo(3);
 
         assertThat((long) withContainerProxy((queries, context) -> queries.count(context, null, tasting("Citrus")))).isEqualTo(3);
-        assertThat((Optional<CoffeeEntity>) withContainerProxy((queries, context) -> queries.first(context, null, null, Sort.parse("-price"))))
-                .hasValueSatisfying(coffee -> assertThat(coffee.getName()).isEqualTo(GEISHA));
+        Optional<CoffeeEntity> mostExpensive = withContainerProxy((queries, context) -> queries.first(context, null, null, Sort.parse("-price")));
+        assertThat(mostExpensive).hasValueSatisfying(coffee -> assertThat(coffee.getName()).isEqualTo(GEISHA));
 
         List<RoasterEntity> roasters = withContainerProxy((queries, context) -> queries.search(context, RoasterEntity.class, equal(RoasterEntity_.country, ETHIOPIA)));
         assertThat(roasters).extracting(RoasterEntity::getName).containsExactly("Kaldi Roasting");
@@ -145,16 +145,17 @@ class EntityQueriesTest extends HibernateTest {
     void fetchesOnlyTheFirstRow() {
         statistics().clear();
 
-        assertThat((Optional<CoffeeEntity>) withQueries((queries, context) -> queries.first(context, null, null, Sort.parse("-price"))))
-                .hasValueSatisfying(coffee -> assertThat(coffee.getName()).isEqualTo(GEISHA));
+        Optional<CoffeeEntity> mostExpensive = withQueries((queries, context) -> queries.first(context, null, null, Sort.parse("-price")));
+        assertThat(mostExpensive).hasValueSatisfying(coffee -> assertThat(coffee.getName()).isEqualTo(GEISHA));
         assertThat(statistics().getEntityLoadCount())
                 .as("a single coffee is hydrated, and not the whole menu it was ordered with")
                 .isEqualTo(1);
-        assertThat((Optional<CoffeeEntity>) withQueries((queries, context) -> queries.first(context, null, null, Sort.NONE)))
+        Optional<CoffeeEntity> first = withQueries((queries, context) -> queries.first(context, null, null, Sort.NONE));
+        assertThat(first)
                 .as("the default ordering applies when none is requested")
                 .hasValueSatisfying(coffee -> assertThat(coffee.getName()).isEqualTo(BLUE_MOUNTAIN));
-        assertThat((Optional<CoffeeEntity>) withQueries((queries, context) -> queries.first(context, equal(CoffeeEntity_.origin, "Mars"), null, Sort.NONE)))
-                .isEmpty();
+        Optional<CoffeeEntity> fromMars = withQueries((queries, context) -> queries.first(context, equal(CoffeeEntity_.origin, "Mars"), null, Sort.NONE));
+        assertThat(fromMars).isEmpty();
     }
 
     @Test
