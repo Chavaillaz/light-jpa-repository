@@ -180,9 +180,18 @@ class CoffeeBulkTest extends HibernateTest {
                     .mapToObj(index -> coffee("Batch " + index))
                     .toList();
 
-            int saved = inTransaction(entityManager -> new SmallBatchRepository(entityManager).saveAllInBatches(batch, 10));
+            runInTransaction(entityManager -> {
+                statistics().clear();
 
-            assertThat(saved).isEqualTo(25);
+                int saved = new SmallBatchRepository(entityManager).saveAllInBatches(batch, 10);
+
+                assertThat(saved).isEqualTo(25);
+                assertThat(statistics().getFlushCount()).as("one flush per batch of ten, the last one partial").isEqualTo(3);
+                assertThat(entityManager.unwrap(Session.class).getStatistics().getEntityCount())
+                        .as("every saved entity is cleared from the persistence context")
+                        .isZero();
+            });
+
             assertThat(remainingCount()).isEqualTo(32);
             assertThat(batch).as("the generated identifiers are populated on the given entities")
                     .allSatisfy(coffee -> assertThat(coffee.getId()).isNotNull());
@@ -195,7 +204,14 @@ class CoffeeBulkTest extends HibernateTest {
                     .mapToObj(index -> coffee("Partial " + index))
                     .toList();
 
-            inTransaction(entityManager -> new SmallBatchRepository(entityManager).saveAllInBatches(batch, 10));
+            runInTransaction(entityManager -> {
+                statistics().clear();
+
+                int saved = new SmallBatchRepository(entityManager).saveAllInBatches(batch, 10);
+
+                assertThat(saved).isEqualTo(7);
+                assertThat(statistics().getFlushCount()).as("the partial batch is flushed before the transaction ends").isEqualTo(1);
+            });
 
             assertThat(remainingCount()).isEqualTo(14);
         }
@@ -203,9 +219,18 @@ class CoffeeBulkTest extends HibernateTest {
         @Test
         @DisplayName("saves nothing and flushes nothing for an empty collection")
         void savesNothingForAnEmptyCollection() {
-            int saved = inTransaction(entityManager -> new SmallBatchRepository(entityManager).saveAllInBatches(List.of(), 10));
+            runInTransaction(entityManager -> {
+                SmallBatchRepository repository = new SmallBatchRepository(entityManager);
+                // Loaded first, so that a flush would have entities to check, and would therefore be counted
+                repository.findAll();
+                statistics().clear();
 
-            assertThat(saved).isZero();
+                int saved = repository.saveAllInBatches(List.of(), 10);
+
+                assertThat(saved).isZero();
+                assertThat(statistics().getFlushCount()).isZero();
+            });
+
             assertThat(remainingCount()).isEqualTo(7);
         }
 
@@ -233,6 +258,8 @@ class CoffeeBulkTest extends HibernateTest {
 
             int strength = withRepository(repository -> repository.getById(menu.getFirst().getId()).getStrength());
             assertThat(strength).as("a change made after the batches to the entity still managed is written").isEqualTo(9);
+            int merged = withRepository(repository -> repository.getById(stale.getId()).getStrength());
+            assertThat(merged).as("the copy a merge made is flushed before being detached, so its change is written").isEqualTo(1);
         }
 
         @Test
