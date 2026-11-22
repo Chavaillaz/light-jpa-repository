@@ -11,8 +11,10 @@ import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.SIDA
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.YIRGACHEFFE;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.coffee;
 import static com.chavaillaz.jakarta.persistence.repository.example.Coffees.namesOf;
+import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
 
 import jakarta.persistence.EntityManager;
 import java.util.List;
@@ -221,10 +223,18 @@ class CoffeeSearchTest extends HibernateTest {
         @DisplayName("keeps the pagination stable by appending the identifier")
         void appendsTheIdentifier() {
             // Several coffees share the same roast, so the ordering is only total because the identifier is appended
-            List<String> paged = withRepository(repository -> namesOf(repository.findAll(0, 4, Sort.parse("roast"))));
-            List<String> repaged = withRepository(repository -> namesOf(repository.findAll(0, 4, Sort.parse("roast"))));
+            recordStatements();
 
-            assertThat(paged).isEqualTo(repaged);
+            List<String> paged = withRepository(repository -> namesOf(repository.findAll(0, 4, Sort.parse("roast"))));
+
+            assertThat(paged)
+                    .as("the dark roast, then the light ones in the order they were persisted")
+                    .containsExactly(HARRAR, BOURBON_POINTU, GEISHA, YIRGACHEFFE);
+            assertThat(statements())
+                    .filteredOn(sql -> sql.startsWith("select ce1_0"))
+                    .singleElement(as(STRING))
+                    .as("the database breaks the ties on the identifier, rather than in whatever order it reads the rows")
+                    .contains("order by ce1_0.roast,ce1_0.id");
         }
 
         @ParameterizedTest(name = "sorting on \"{0}\" is rejected")
