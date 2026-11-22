@@ -95,6 +95,19 @@ class PageablesTest extends HibernateTest {
     }
 
     @Test
+    @DisplayName("returns no row, and not an error, when the requested offset overflows")
+    void returnsNothingBeyondTheLargestOffset() {
+        runInTransaction(Coffees::persistMenu);
+        TypedQuery<CoffeeEntity> query = query();
+
+        // page * size does not fit in the int offset a query takes, which the provider rejects as a negative first result
+        Pageables.apply(query, Pageable.of(Integer.MAX_VALUE, 1000));
+
+        assertThat(query.getMaxResults()).isZero();
+        assertThat(query.getResultList()).as("left unpaginated, the query would return the whole menu").isEmpty();
+    }
+
+    @Test
     @DisplayName("computes the total only when the results are paginated")
     void computesTheTotalOnlyWhenPaginated() {
         AtomicInteger calls = new AtomicInteger();
