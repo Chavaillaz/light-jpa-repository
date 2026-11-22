@@ -103,8 +103,8 @@
         <!-- Required by the module of Jakarta Transactions, along with Jakarta Interceptors it brings, which the POM
              of Jakarta Transactions leaves to the container: needed to resolve the module of the library -->
         <dependency>
-            <groupId>jakarta.enterprise</groupId>
-            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <groupId>jakarta.cdi</groupId>
+            <artifactId>jakarta.cdi-api</artifactId>
             <version>5.0.0</version>
             <scope>provided</scope>
         </dependency>
