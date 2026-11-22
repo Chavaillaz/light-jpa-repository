@@ -108,8 +108,8 @@ class Base64CursorCodecTest {
     }
 
     @Test
-    @DisplayName("stays opaque, the keys not being readable from the token")
-    void staysOpaque() {
+    @DisplayName("does not carry the keys in clear text")
+    void doesNotCarryTheKeysInClearText() {
         assertThat(codec.encode(new CursorPosition(List.of("Yirgacheffe"), false, "cafe")))
                 .doesNotContain("Yirgacheffe");
     }

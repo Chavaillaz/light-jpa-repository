@@ -68,7 +68,7 @@ class CursorValuesTest {
     }
 
     @Test
-    @DisplayName("formats a date as its epoch millis, so that the textual ordering matches the temporal one")
+    @DisplayName("formats a date as its epoch millis, exact to the millisecond and free of any time zone")
     void formatsADate() {
         Date date = new Date(1_715_000_000_000L);
 
