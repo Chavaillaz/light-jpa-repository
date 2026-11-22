@@ -41,6 +41,7 @@
              built. The release script sets it along with the version, through versions:set -->
         <project.build.outputTimestamp>2026-11-22T00:00:00Z</project.build.outputTimestamp>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <maven.compiler.failOnWarning>true</maven.compiler.failOnWarning>
         <hibernate.version>7.4.14.Final</hibernate.version>
         <lombok.version>1.18.48</lombok.version>
         <jspecify.version>1.0.1</jspecify.version>
@@ -293,6 +294,7 @@
                 <version>3.16.0</version>
                 <configuration>
                     <release>21</release>
+                    <showWarnings>true</showWarnings>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -306,6 +308,27 @@
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
+                <executions>
+                    <execution>
+                        <id>default-compile</id>
+                        <configuration>
+                            <compilerArgs>
+                                <arg>-Xlint:all,-processing,-classfile</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>default-testCompile</id>
+                        <configuration>
+                            <compilerArgs>
+                                <arg>-Xlint:all,-processing,-classfile</arg>
+                                <!-- The metamodel of the generic EquipmentEntity, which Hibernate generates, names it
+                                     by its raw type: the processor marks the classes it writes as suppressing that -->
+                                <arg>-AaddSuppressWarningsAnnotation=rawtypes</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
 
             <plugin>
