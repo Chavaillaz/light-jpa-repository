@@ -55,8 +55,9 @@ class GrinderCursorTest extends HibernateTest {
     @Test
     @DisplayName("streams every entity past its first page")
     void streamsPastTheFirstPage() {
+        // Bounded one item past the five grinders, so that a walk that never ends fails the test rather than hangs it
         List<String> names = withRepository(GrinderRepositoryJpa.class, repository ->
-                repository.streamAll(Sort.NONE, 2).map(GrinderEntity::getName).toList());
+                repository.streamAll(Sort.NONE, 2).limit(6).map(GrinderEntity::getName).toList());
 
         assertThat(names).containsExactly("Comandante", "Kinu", "Baratza", "Eureka", "Niche");
     }

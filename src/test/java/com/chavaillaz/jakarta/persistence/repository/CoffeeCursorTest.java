@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,6 +58,14 @@ class CoffeeCursorTest extends HibernateTest {
         return withRepository(repository -> repository.findAll(token, size, sort));
     }
 
+    /**
+     * Collects the names of a walk, bounded one item past the whole menu, so that a walk that never ends fails the
+     * test rather than hangs it.
+     */
+    private static List<String> namesWalked(Stream<CoffeeEntity> walk) {
+        return walk.limit(MENU.size() + 1).map(CoffeeEntity::getName).toList();
+    }
+
     @Test
     @DisplayName("walks the whole menu forward, page after page")
     void walksForward() {
@@ -64,7 +73,9 @@ class CoffeeCursorTest extends HibernateTest {
         String token = null;
         int pages = 0;
 
-        while (true) {
+        // Bounded by the number of coffees, more than any walk of the menu needs, so that a walk that never ends
+        // fails the test rather than hangs it
+        while (pages < MENU.size()) {
             CursorResult<CoffeeEntity> result = page(token, 3, Sort.NONE);
             visited.addAll(namesOf(result));
             pages++;
@@ -83,8 +94,7 @@ class CoffeeCursorTest extends HibernateTest {
     @Test
     @DisplayName("streams every entity lazily, one page at a time")
     void streamsEverything() {
-        List<String> names = withRepository(repository ->
-                repository.streamAll(Sort.NONE, 3).map(CoffeeEntity::getName).toList());
+        List<String> names = withRepository(repository -> namesWalked(repository.streamAll(Sort.NONE, 3)));
 
         assertThat(names).containsExactlyElementsOf(MENU);
     }
@@ -122,8 +132,7 @@ class CoffeeCursorTest extends HibernateTest {
     @Test
     @DisplayName("streams the entities matching a restriction, one page at a time")
     void streamsARestrictedSet() {
-        List<String> names = withRepository(repository ->
-                repository.streamFromOrigin(ETHIOPIA, Sort.NONE, 2).map(CoffeeEntity::getName).toList());
+        List<String> names = withRepository(repository -> namesWalked(repository.streamFromOrigin(ETHIOPIA, Sort.NONE, 2)));
 
         assertThat(names).containsExactly(HARRAR, SIDAMO, YIRGACHEFFE);
     }
@@ -131,8 +140,7 @@ class CoffeeCursorTest extends HibernateTest {
     @Test
     @DisplayName("streams the entities matching a criteria, one page at a time")
     void streamsACriteriaSet() {
-        List<String> names = withRepository(repository ->
-                repository.streamTasting("citrus", Sort.NONE, 2).map(CoffeeEntity::getName).toList());
+        List<String> names = withRepository(repository -> namesWalked(repository.streamTasting("citrus", Sort.NONE, 2)));
 
         assertThat(names).containsExactly(GEISHA, SIDAMO, YIRGACHEFFE);
     }

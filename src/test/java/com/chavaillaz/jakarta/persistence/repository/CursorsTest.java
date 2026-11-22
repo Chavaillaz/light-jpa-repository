@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import org.jspecify.annotations.Nullable;
@@ -232,62 +232,70 @@ class CursorsTest {
         @Test
         @DisplayName("fetches nothing until the stream is consumed")
         void fetchesNothingUntilConsumed() {
-            AtomicInteger fetched = new AtomicInteger();
+            List<Cursor> requested = new ArrayList<>();
 
             Stream<Bean> stream = Cursors.stream(cursor -> {
-                fetched.incrementAndGet();
+                requested.add(cursor);
                 return page(BEANS.subList(0, 2), null);
             }, SORT, 2);
 
-            assertThat(fetched).as("not even the first page is fetched on the call").hasValue(0);
-            assertThat(stream.toList()).hasSize(2);
-            assertThat(fetched).hasValue(1);
+            assertThat(requested).as("not even the first page is fetched on the call").isEmpty();
+            // Bounded, so that a walk that never ends fails the test rather than hangs it
+            assertThat(stream.limit(BEANS.size()).toList()).hasSize(2);
+            assertThat(requested).containsExactly(Cursor.first(2, SORT));
         }
 
         @Test
-        @DisplayName("fetches only the pages a short circuiting operation needs")
+        @DisplayName("fetches only the pages a short circuiting operation needs, each with the token of the previous one")
         void fetchesOnlyTheNeededPages() {
-            AtomicInteger fetched = new AtomicInteger();
+            List<Cursor> requested = new ArrayList<>();
 
             List<Bean> walked = Cursors.stream(cursor -> {
-                fetched.incrementAndGet();
-                return page(BEANS.subList(0, 2), "more");
+                requested.add(cursor);
+                return page(BEANS.subList(0, 2), "page" + (requested.size() + 1));
             }, SORT, 2).limit(3).toList();
 
             assertThat(walked).hasSize(3);
-            assertThat(fetched).as("the third item comes from the second page, the third one is never asked for").hasValue(2);
+            assertThat(requested)
+                    .as("the third item comes from the second page, asked for with the token of the first one, the third one is never asked for")
+                    .containsExactly(Cursor.first(2, SORT), Cursor.of("page2", 2, SORT));
         }
 
         @Test
         @DisplayName("stops on a page announcing a successor it hands no token for, instead of walking forever")
         void stopsOnAMissingToken() {
-            AtomicInteger fetched = new AtomicInteger();
+            List<Cursor> requested = new ArrayList<>();
 
+            // Bounded, so that a walk that never ends fails the test rather than hangs it
             List<Bean> walked = Cursors.stream(cursor -> {
-                fetched.incrementAndGet();
+                requested.add(cursor);
                 return new CursorResult<>(BEANS.subList(0, 2), 2, null, null, true, false);
-            }, SORT, 2).toList();
+            }, SORT, 2).limit(BEANS.size()).toList();
 
             assertThat(walked).hasSize(2);
-            assertThat(fetched).as("requesting the same page again would restart the walk from the first one").hasValue(1);
+            assertThat(requested)
+                    .as("requesting the same page again would restart the walk from the first one")
+                    .containsExactly(Cursor.first(2, SORT));
         }
 
         @Test
         @DisplayName("fetches only the pages an iterator pulls, rather than buffering the whole walk")
         void fetchesOnlyThePagesAnIteratorPulls() {
-            AtomicInteger fetched = new AtomicInteger();
+            List<Cursor> requested = new ArrayList<>();
 
             Iterator<Bean> iterator = Cursors.stream(cursor -> {
-                int page = fetched.incrementAndGet();
-                return page(BEANS.subList(0, 2), page < 3 ? "more" : null);
+                requested.add(cursor);
+                return page(BEANS.subList(0, 2), requested.size() < 3 ? "page" + (requested.size() + 1) : null);
             }, SORT, 2).iterator();
 
             assertThat(iterator.next()).isEqualTo(BEANS.getFirst());
-            assertThat(fetched).as("a flat mapped walk pushes all three pages into the buffer of its iterator").hasValue(1);
+            assertThat(requested).as("a flat mapped walk pushes all three pages into the buffer of its iterator").hasSize(1);
 
             iterator.next();
             iterator.next();
-            assertThat(fetched).as("the third item is the first one of the second page").hasValue(2);
+            assertThat(requested)
+                    .as("the third item is the first one of the second page, asked for with the token of the first one")
+                    .containsExactly(Cursor.first(2, SORT), Cursor.of("page2", 2, SORT));
         }
 
     }
